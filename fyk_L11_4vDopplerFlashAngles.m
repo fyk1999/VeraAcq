@@ -29,12 +29,13 @@ P(2).startDepth = 50;   % Acquisition depth in wavelengths
 P(2).endDepth = 140;   % This should preferrably be a multiple of 128 samples.
 
 % Set 2D parameters
-na = 3;      % Set na = number of flash angles for 2D.
+na = 4;      % Set na = number of flash angles for 2D.
 % set dtheta2D to range over +/- 15 degrees.
 if (na > 1)
-    dtheta2D = (12*pi/180)/(na/2-1);
+    dtheta2D = (12*pi/180)/(na-1);
     startAngle = -12*pi/180/2;
-else dtheta2D = 0;
+else 
+    dtheta2D = 0;
     startAngle=0;
 end
 
@@ -50,7 +51,7 @@ Resource.Parameters.numRcvChannels = 128;        % number of receive channels.
 Resource.Parameters.speedOfSound = 1540;    % set speed of sound in m/sec before calling computeTrans
 Resource.Parameters.verbose = 2;
 Resource.Parameters.initializeOnly = 0;
-Resource.Parameters.simulateMode = 0;
+Resource.Parameters.simulateMode = 1;
 %  Resource.Parameters.simulateMode = 1 forces simulate mode, even if hardware is present.
 %  Resource.Parameters.simulateMode = 2 stops sequence and processes RcvData continuously.
 
@@ -128,14 +129,18 @@ TX = repmat(struct('waveform', 1, ...
                    'Delay', zeros(1,Trans.numelements)), 1, na); % na TXs for 2D + 1 for Doppler
 % - Set event specific TX attributes.
 for n = 1:na   % na transmit events for both 2D and Doppler
-    if mod(n,2) == 1
-        TX(n).Steer = [(startAngle+(n-1)/2*dtheta2D),0.0];
-        TX(n).Delay = computeTXDelays(TX(n));
-    end
-    if mod(n,2) == 0
-        TX(n).Steer = [(startAngle+(n-2)/2*dtheta2D),0.0];
-        TX(n).Delay = computeTXDelays(TX(n));
-    end
+%     if mod(n,2) == 1
+%         TX(n).Steer = [(startAngle+(n-1)/2*dtheta2D),0.0];
+%         TX(n).Delay = computeTXDelays(TX(n));
+%     end
+%     if mod(n,2) == 0
+%         TX(n).Steer = [(startAngle+(n-2)/2*dtheta2D),0.0];
+%         TX(n).Delay = computeTXDelays(TX(n));
+%     end
+
+    TX(n).Steer = [(startAngle+(n-1)*dtheta2D),0.0];
+    TX(n).Delay = computeTXDelays(TX(n));
+
 end
 
 
@@ -242,7 +247,7 @@ end
 
 %  - ReconInfos for Doppler ensemble.
 for i = 1:ne
-    k = i*na;
+    k = (i-1)*na + na;
     ReconInfo(k+1) = 'replaceIQ';
     for j = 1:na
         ReconInfo(k+j).txnum = j;
@@ -345,11 +350,12 @@ nsc = 10;  % next SeqControl number
 % Specify Event structure arrays.
 n = 1;
 for i = 1:Resource.RcvBuffer(1).numFrames
+    ind = na*(ne+1)*(i-1);
     % Acquire 2D frame
     for j = 1:na
         Event(n).info = 'Acquire 2D flash angle';
         Event(n).tx = j;
-        Event(n).rcv = (na+ne)*(i-1)+j;
+        Event(n).rcv = ind + j;
         Event(n).recon = 0;
         Event(n).process = 0;
         Event(n).seqControl = 1;
@@ -361,7 +367,7 @@ for i = 1:Resource.RcvBuffer(1).numFrames
     Event(n-1).seqControl = [2,3];   % replace last 2D acquisition Event's seqControl
     % Acquire Doppler ensemble.
     for k = 1:ne
-        trace = (na*(ne+1))*(i-1) + k*na;
+        trace = ind + (k-1+1)*na;
         for j = 1:na
             Event(n).info = 'Acquire Doppler ensemble';
             Event(n).tx = j;
@@ -525,7 +531,7 @@ assignin('base','Control', Control);
 
 % If PTool window is open, adjust all uicontrols
 hPTool = findobj('tag','ProcessTool');
-if ishandle(hPTool),
+if ishandle(hPTool)
     posPTool = get(hPTool,'position');
     PTool;
     set(findobj('tag','ProcessTool'),'position',posPTool);
@@ -533,7 +539,7 @@ end
 
 % If ColorMapTool is open, close it.
 hCMTool = findobj('tag','ColorMapTool');
-if ishandle(hCMTool),
+if ishandle(hCMTool)
     delete(hCMTool);
     set(findobj('tag','toolsMenu'),'Value',1); % set tools selection back to none
 end
@@ -583,7 +589,7 @@ assignin('base','Control', Control);
 
 % If PTool window is open, adjust persistLevel1 in Process(3)
 hPTool = findobj('tag','ProcessTool');
-if ishandle(hPTool),
+if ishandle(hPTool)
     hPNum = findobj('tag','processNum');
     if isequal(get(findobj('tag','processNum'),'Value'),3)
         set(findobj('tag','persistSlider1'),'Value',UIValue);
