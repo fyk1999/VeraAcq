@@ -15,28 +15,27 @@
 %% System parameters
 clear %all
 
-filename = ('L11-4_WideBeamMonitor_ExternalVibration_MultiAngleDetect');
-pn = [];
+filename = ('fyk_L11_4vAcquireDopplerIQ_AnglesSC');
+pn = uigetdir;
+Dnum = 1;
+
 EXPtimes = 200;
 ScaleMax = 500;  % scaling of the display function
 ScaleMin = 0;  % scaling of the display function
 ScaleRange = 0;  % scaling of the display function
 ScaleOffset = 0;  % scaling of the display function
-ne = 10;         % Set na = number of detect acquisitions.
+ne = 10;         % Set ne = number of detect acquisitions.
 % DPIFrames   = 1;
 BmodeFrames = 10;
+DopplerFrames = 100;
 
 maxVoltage = 75;
-Fc = 6.25;
-DetectTprf = 100; % in us
+Fc = 6.25e6;
 na  = 3;%number of views (angles) for compound imaging, can be even or odd
-dtheta = (12*pi/180)/(nv);        %increment of angle:-2,0,2
-startAngle = -(nv-1)/2*dtheta;
-
-% parameter for B Mode
-na = 3;
-dthetaB = dtheta;
-startAngleB = startAngle;
+PRTus = 120; % in us
+PRF = 1/(na*PRTus*1e-6);
+dtheta = (12*pi/180)/(na);        %increment of angle:-2,0,2
+startAngle = -(na-1)/2*dtheta;
 
 WBFactor = 1.8;  %  control the element size for wide beam detect
 
@@ -116,16 +115,27 @@ para.c = 1540;
 para.fc = Fc;
 para.fs = para.fc*4;
 para.ts = 1/para.fs;
-para.nv = nv;
-para.na = ne;
-para.TXangle = startAngle+[0:nv-1].*dtheta;
+para.na = na;
+para.ne = ne;
+para.TXangle = startAngle+[0:na-1].*dtheta;
 para.pitch = para.c/para.fc;
 para.startDepth = Format.startDepth;
 para.endDepth = Format.startDepth + wlsPer128*ceil(maxAcqLength/wlsPer128);
 para.intervalSample = ceil(para.endDepth-para.startDepth)*4*2;
-para.DetectTprf = DetectTprf*1e-6;
-para.Tprf = DetectTprf*1e-6;
+para.DetectTprf = PRTus*1e-6;
+para.Tprf = PRTus*1e-6;   %?????????????xxxxxxxxx???????????????!!!!!!!!
 para.prf = 1/para.Tprf;
+
+
+% ROI Info
+Depth = floor(PData(1).Region(2).Shape.height*2);
+Width = floor(PData(1).Region(2).Shape.width);
+Origin_x = floor(PData(1).Region(2).Shape.Position(1)-Width/2+65);
+Origin_z = floor(((PData(1).Region(2).Shape.Position(3))-Format.startDepth)*2);
+ROIinfo.Depth = Depth;
+ROIinfo.Width = Width;
+ROIinfo.Origin_x = Origin_x;
+ROIinfo.Origin_z = Origin_z;
 
 %% Specify Resources.
 autofixed_sampleNum = 1024*ceil(para.intervalSample/1024);
@@ -135,7 +145,6 @@ Resource.RcvBuffer(1).datatype = 'int16';
 Resource.RcvBuffer(1).rowsPerFrame = na*autofixed_sampleNum;
 Resource.RcvBuffer(1).colsPerFrame = Resource.Parameters.numRcvChannels;  % RcvBuffer is 64 cols using syn aper.
 Resource.RcvBuffer(1).numFrames = BmodeFrames;     %
-% Resource.RcvBuffer(1).VDAS.dmaTimeout = 2000;
 
 % InterBuffer for B Mode
 Resource.InterBuffer(1).datatype = 'complex';
@@ -149,12 +158,12 @@ Resource.ImageBuffer(1).rowsPerFrame = PData(1).Size(1); % this is for maximum d
 Resource.ImageBuffer(1).colsPerFrame = PData(1).Size(2);
 Resource.ImageBuffer(1).numFrames = BmodeFrames;
 
-% RcvBuffer for shear wave raw data
+% RcvBuffer for doppler wave raw data
 Resource.RcvBuffer(2).datatype = 'int16';
-Resource.RcvBuffer(2).rowsPerFrame = ne*nv*autofixed_sampleNum;
+Resource.RcvBuffer(2).rowsPerFrame = ne*na*autofixed_sampleNum;
 Resource.RcvBuffer(2).colsPerFrame = Resource.Parameters.numRcvChannels;  % RcvBuffer is 64 cols using syn aper.
-Resource.RcvBuffer(2).numFrames = 1;     %
-% Resource.RcvBuffer(2).VDAS.dmaTimeout = 2000;
+Resource.RcvBuffer(2).numFrames = DopplerFrames;     %
+
 
 % InterBuffer for DPI visualizaion
 Resource.InterBuffer(2).datatype = 'complex';
@@ -162,20 +171,6 @@ Resource.InterBuffer(2).numFrames = 1;  % one intermediate buffer needed.
 Resource.InterBuffer(2).rowsPerFrame = PData(1).Size(1);
 Resource.InterBuffer(2).colsPerFrame = PData(1).Size(2);
 Resource.InterBuffer(2).pagesPerFrame = ne;
-
-% RcvBuffer for shear wave raw data
-Resource.RcvBuffer(3).datatype = 'int16';
-Resource.RcvBuffer(3).rowsPerFrame = nv*autofixed_sampleNum;
-Resource.RcvBuffer(3).colsPerFrame = Resource.Parameters.numRcvChannels;  % RcvBuffer is 64 cols using syn aper.
-Resource.RcvBuffer(3).numFrames = 1;     %
-% Resource.RcvBuffer(2).VDAS.dmaTimeout = 2000;
-
-% InterBuffer for DPI visualizaion
-Resource.InterBuffer(3).datatype = 'complex';
-Resource.InterBuffer(3).numFrames = 1;  % one intermediate buffer needed.
-Resource.InterBuffer(3).rowsPerFrame = PData(1).Size(1);
-Resource.InterBuffer(3).colsPerFrame = PData(1).Size(2);
-Resource.InterBuffer(3).pagesPerFrame = 1;
 
 
 Resource.DisplayWindow(1).Title = filename;
@@ -207,28 +202,17 @@ TX = repmat(struct('waveform', 1, ...
     'Delay', zeros(1,Trans.numelements),...
     'TXPD', [], ...
     'peakCutOff', 0.2, ...%for more signal change to 0.2 from 1.0
-    'peakBLMax', 4.0), 1, na+nv);
+    'peakBLMax', 4.0), 1, na);
 
 
 
-% TxOrgX = (-63.5*Trans.spacing):(127*Trans.spacing/(numTx-1)):(63.5*Trans.spacing);
 for ii = 1:na
-    n = ii;
-    
     TX(ii).focus = 0.0;
-    TX(ii).Steer = [(startAngleB+(ii-1)*dthetaB),0.0];%    TX(n).Steer = [(startAngle+(n-1)*dtheta),0.0];
+    TX(ii).Steer = [(startAngle+(ii-1)*dtheta),0.0];%    TX(n).Steer = [(startAngle+(n-1)*dtheta),0.0];
     TX(ii).Apod = ones(1,Trans.numelements);
     TX(ii).Delay = computeTXDelays(TX(ii));
 end
 
-for ii = 1:nv
-    TX(na+ii).waveform = 2;
-    TX(na+ii).focus = 0.0;
-    TX(na+ii).Steer = [(startAngle+(ii-1)*dtheta),0.0];%    TX(n).Steer = [(startAngle+(n-1)*dtheta),0.0];
-    TX(na+ii).Apod = ones(1,Trans.numelements);
-    TX(na+ii).Delay = computeTXDelays(TX(na+ii));
-    
-end
 
 TPC(1).name = '2D';
 TPC(1).maxHighVoltage = maxVoltage;
@@ -243,6 +227,7 @@ RcvProfile(2).LnaZinSel = 31; % Force high-Z state for best Doppler sensitivity
 TGC.CntrlPts = [200,590,650,710,770,800,850,950];
 TGC.rangeMax = Format.endDepth;
 TGC.Waveform = computeTGCWaveform(TGC);
+
 
 %% Receive parameters
 % Specify Receive structure arrays.
@@ -259,50 +244,47 @@ Receive = repmat(struct('Apod', zeros(1,Trans.numelements), ...
     'acqNum', 1, ...
     'sampleMode', 'NS200BW', ...
     'mode', 0, ...
-    'callMediaFunc', 0), 1, na*BmodeFrames+ne*nv+nv);
+    'callMediaFunc', 0), 1, na*BmodeFrames+ne*na*Resource.RcvBuffer(2).numFrames);
 
-% - Set event specific Receive attributes for each frame.
+% - Set event specific Receive attributes for B-mode
 for ii = 1:Resource.RcvBuffer(1).numFrames
-        Receive(na*(ii-1)+1).callMediaFunc = 1;  % make media move per frame
+    Receive(na*(ii-1)+1).callMediaFunc = 1;  % make media move per frame
     for j = 1:na  % numRays acquisitions per frame for BMode
         Receive(na*(ii-1)+j).Apod(1:128) = 1.0;
         Receive(na*(ii-1)+j).framenum = ii;
+        Receive(na*(ii-1)+j).bufNum = 1;
         Receive(na*(ii-1)+j).acqNum = j;
     end
-    
+
 end
 
-        Receive(na*BmodeFrames+1).callMediaFunc = 1;
-
-for j = 1:ne
-    
-    for k = 1:nv
-        Receive(na*BmodeFrames+(j-1)*nv+k).callMediaFunc = 1;
-        Receive(na*BmodeFrames+(j-1)*nv+k).Apod(1:128) = 1.0;
-        Receive(na*BmodeFrames+(j-1)*nv+k).bufnum = 2;
-        Receive(na*BmodeFrames+(j-1)*nv+k).acqNum = (j-1)*nv+k;
-        
+% - Set event specific Receive attributes for Doppler-mode
+ind = na*BmodeFrames;
+for N = 1:Resource.RcvBuffer(2).numFrames
+    for j = 1:ne
+        for k = 1:na
+            Receive(ind+(j-1)*na+k).callMediaFunc = 1;
+            Receive(ind+(j-1)*na+k).Apod(1:128) = 1.0;
+            Receive(ind+(j-1)*na+k).framenum = N;
+            Receive(ind+(j-1)*na+k).bufnum = 2;
+            Receive(ind+(j-1)*na+k).acqNum = (j-1)*na+k;
+        end
     end
-    
-    
+    ind = ind + na*ne;
 end
-
-for f = 1:nv
-    
-    Receive(na*BmodeFrames+ne*nv+f).callMediaFunc = 1;
-    Receive(na*BmodeFrames+ne*nv+f).Apod(1:128) = 1.0;
-    Receive(na*BmodeFrames+ne*nv+f).bufnum = 3;
-    Receive(na*BmodeFrames+ne*nv+f).framenum = 1;
-    Receive(na*BmodeFrames+ne*nv+f).acqNum = f;
-    
-end
-
 
 
 
 %% Reconstruction parameters
 % Specify Recon structure arrays.
-% - We need a Recon structure for the 2D image which will be used for each frame.
+
+Recon = repmat(struct('senscutoff', 0.7, ...
+               'pdatanum', 1, ...
+               'rcvBufFrame', -1, ...
+               'IntBufDest', [1,1], ...
+               'ImgBufDest', [1,-1], ...
+               'RINums', zeros(1,1)), 1, 2);
+
 Recon(1) = struct(...
     'senscutoff', 0.6, ...
     'pdatanum', 1, ...
@@ -311,22 +293,14 @@ Recon(1) = struct(...
     'ImgBufDest', [1,-1], ...
     'RINums',(1:na)');
 
+
 Recon(2) = struct(...
     'senscutoff', 0.6, ...
     'pdatanum', 1, ...
-    'rcvBufFrame',1, ...
+    'rcvBufFrame',-1, ...
     'IntBufDest', [2,1], ...
     'ImgBufDest', [0,0], ...
-    'RINums',(na+1:(ne*nv+na))');
-
-
-Recon(3) = struct(...
-    'senscutoff', 0.6, ...
-    'pdatanum', 1, ...
-    'rcvBufFrame',1, ...
-    'IntBufDest', [3,1], ...
-    'ImgBufDest', [0,0], ...
-    'RINums',((ne*nv+na+1):(ne*nv+na+nv))');
+    'RINums',(na+1:(ne*na+na))');
 
 
 % Define ReconInfo structures.
@@ -335,7 +309,7 @@ ReconInfo = repmat(struct('mode', 'accumIQ', ...    % accumulate IQ data.
     'txnum', 1, ...
     'rcvnum', 1, ...
     'pagenum',1, ...
-    'regionnum', 1), 1, ne*nv+na+nv);
+    'regionnum', 1), 1, na+ne*na);
 
 ReconInfo(1).mode = 'replaceIQ'; % replace IQ data
 for j = 1:na
@@ -346,34 +320,18 @@ ReconInfo(na).mode = 'accumIQ_replaceIntensity'; % accum and detect
 
 %  - ReconInfos for Doppler ensemble.
 for j = 1:ne
-    
-    for ii = 1:nv
-        
-        if ii ==1
-            ReconInfo(na+(j-1)*nv+ii).mode = 'replaceIQ';
+    for ii = 1:na
+        if ii == 1
+            ReconInfo(na+(j-1)*na+ii).mode = 'replaceIQ';
         end
-        
-        ReconInfo(na+(j-1)*nv+ii).txnum = na+ii;
-        ReconInfo(na+(j-1)*nv+ii).rcvnum = na*BmodeFrames+(j-1)*nv+ii;
-        ReconInfo(na+(j-1)*nv+ii).pagenum = j;
-        ReconInfo(na+(j-1)*nv+ii).regionnum = 2;
+        ReconInfo(na+(j-1)*na+ii).txnum = ii;
+        ReconInfo(na+(j-1)*na+ii).rcvnum = na*BmodeFrames+(j-1)*na+ii;  % ???????!!!!!!
+        ReconInfo(na+(j-1)*na+ii).pagenum = j;
+        ReconInfo(na+(j-1)*na+ii).regionnum = 2;
     end
-%     ReconInfo(numRays+(j)*nv).mode = 'accumIQ_replaceIntensity'; % accum and detect
-
 end
 
-for ii = 1:nv
-    
-    if ii ==1
-        ReconInfo(na+ne*nv+ii).mode = 'replaceIQ';
-    end
-    
-    ReconInfo(na+ne*nv+ii).txnum = na+ii;
-    ReconInfo(na+ne*nv+ii).rcvnum = na*BmodeFrames+ne*nv+ii;
-    ReconInfo(na+ne*nv+ii).pagenum = 1;
-    ReconInfo(na+ne*nv+ii).regionnum = 2;
-end
-% ReconInfo(numRays+na*nv+nv).mode = 'accumIQ_replaceIntensity'; % accum and detect
+
 %% Process parameters
 % Specify Process structure array. (1) is used for B-mode imaging
 Process(1).classname = 'Image';
@@ -405,12 +363,8 @@ Process(3).method = 'DrawROI';
 Process(3).Parameters = {'srcbuffer','none'};
 
 Process(4).classname = 'External';
-Process(4).method = 'SavingAddress';
-Process(4).Parameters = {'srcbuffer','none'};
-
-Process(5).classname = 'External';
-Process(5).method = 'SavingData';
-Process(5).Parameters = {'srcbuffer','receive',... % name of buffer to process.
+Process(4).method = 'SavingData';
+Process(4).Parameters = {'srcbuffer','receive',... % name of buffer to process.
     'srcbufnum',2,...
     'dstbuffer','none'};
 %% SeqControl and Events
@@ -420,64 +374,38 @@ SeqControl(1).argument = 500000; % wait 100 msec.
 
 % - time between detect acquisitions
 SeqControl(2).command = 'timeToNextAcq';
-SeqControl(2).argument = DetectTprf;               % 100 usec (10KHz),500 usec (2 KHz)
-PRF=2;
-
-% - time between frames
-SeqControl(3).command = 'timeToNextEB';    % set time between extended bursts
-SeqControl(3).argument = 10;            % 200000usec = 200msec (~ 5 fps)
-TTNEB=3;
+SeqControl(2).argument = PRTus;               % 100 usec (10KHz),500 usec (2 KHz)
+TTNAQ = 2;
 
 % - Return to Matlab
-SeqControl(4).command = 'returnToMatlab';
+SeqControl(3).command = 'returnToMatlab';
+RTML = 3;
 
-% - Jump back to start.
-SeqControl(5).command = 'jump';
-SeqControl(5).argument = 2;
+SeqControl(4).command = 'timeToNextAcq';  % time between synthetic aperture acquisitions     
+SeqControl(4).argument = Format.endDepth*2/(para.c)+900;
+TTNLine = 4;
 
-% - Trigger out
-SeqControl(6).command = 'triggerOut';
-
-SeqControl(7).command = 'timeToNextAcq';
-SeqControl(7).argument = 50;
-
-%没有用到？
-SeqControl(8).command = 'timeToNextAcq';  % time between synthetic aperture acquisitions     
-% SeqControl(8).argument = 220;  % 220 usec
-SeqControl(8).argument = Format.endDepth*2/(Fc)+900;
-TTNLine = 8;
-
-SeqControl(9).command = 'timeToNextAcq';  % time between synthetic aperture acquisitions
-SeqControl(9).argument = 30000;  % 30000 usec = 30msec time between frames
-TTNF = 9;
-
-SeqControl(10).command = 'noop';
-SeqControl(10).argument = 500000;
-TTNEBX = 10;
-
-SeqControl(11).command = 'triggerIn';
-SeqControl(11).condition = 'Trigger_1_Rising'; % input BNC #1 falling edge
-SeqControl(11).argument = 200; % 250ms*argument msec timeout delay
-% (Timeout range is 1:255 in 250 msec steps; 0 means timeout disabled)
-SeqControl(12).command = 'sync';
-SeqControl(12).argument = 10000000; % 10 sec timeout for software sequencer (default is 0.5 seconds)
+SeqControl(5).command = 'timeToNextAcq';  % time between synthetic aperture acquisitions
+SeqControl(5).argument = 30000;  % 30000 usec = 30msec time between frames
+TTNF = 5;
 
 % -- Change to Profile 2 (Doppler)
-SeqControl(13).command = 'setTPCProfile';
-SeqControl(13).condition = 'next';
-SeqControl(13).argument = 2;
+SeqControl(6).command = 'setTPCProfile';
+SeqControl(6).condition = 'next';
+SeqControl(6).argument = 2;
+TCPDP = 6;
+
 % -- Change to Profile 1 (2D)
-SeqControl(14).command = 'setTPCProfile';
-SeqControl(14).condition = 'next';
-SeqControl(14).argument = 1;
+SeqControl(7).command = 'setTPCProfile';
+SeqControl(7).condition = 'next';
+SeqControl(7).argument = 1;
+TCPBB = 7;
 
-SeqControl(15).command = 'triggerOut';
-SeqControl(15).condition = 'syncADC_CLK'; % input BNC #1 falling edge
-% SeqControl(15).argument = 1000000; % 250ms*argument msec timeout delay
+SeqControl(8).command = 'triggerOut';
+SeqControl(8).condition = 'syncADC_CLK'; % input BNC #1 falling edge
+TGOUT = 8;
 
-SeqControl(16).command = 'noop';
-SeqControl(16).argument = 500000;
-nsc = 17;
+nsc = 9;
 
 % Specify Event structure arrays.
 n = 1;
@@ -503,7 +431,7 @@ for ii = 1:Resource.RcvBuffer(1).numFrames   %Resource.RcvBuffer(1).numFrames = 
     Event(n).rcv = 0;        % no rcv
     Event(n).recon =0;      % reconstruction
     Event(n).process = 0;    % processing
-    Event(n).seqControl = nsc; % return to Matlab
+    Event(n).seqControl = nsc; 
     SeqControl(nsc).command = 'transferToHost';
     nsc = nsc + 1;
     n = n + 1;
@@ -522,7 +450,7 @@ for ii = 1:Resource.RcvBuffer(1).numFrames   %Resource.RcvBuffer(1).numFrames = 
     Event(n).rcv = 0;        % no rcv
     Event(n).recon = 0;      % reconstruction
     Event(n).process = 3;    % process
-    Event(n).seqControl = 4;
+    Event(n).seqControl = RTML;
     n = n+1;
     
 end
@@ -541,141 +469,52 @@ n = n+1;
 
 nStartDoppler = n;  
 %
-Event(n).info = 'loopC';
-Event(n).tx = 0;         % no transmit
-Event(n).rcv = 0;        % no rcv
-Event(n).recon = 0;      % no reconstruction
-Event(n).process = 0;    % no process
-Event(n).seqControl = nsc;
-SeqControl(nsc).command = 'loopCnt';
-SeqControl(nsc).argument = EXPtimes-1;
-nsc = nsc+1;
-n = n+1;
-
 
 Event(n).info = 'TPC Doppler';
 Event(n).tx = 0;
 Event(n).rcv = 0;
 Event(n).recon = 0;
 Event(n).process = 0;
-Event(n).seqControl = 13;
-n = n+1;
-    
-  
-for ii=1:nv
-    Event(n).info = 'Acquire data';
-%     Event(n).tx = numRays+ii; %  PWNum*PWFocusXNum+numRays+1;
-    Event(n).tx = 0; %  PWNum*PWFocusXNum+numRays+1;
-    Event(n).rcv =na*BmodeFrames+nv*ne+ii; %numRays*BmodeFrames+j;%%%
-    Event(n).recon = 0;      % no reconstruction.
-    Event(n).process = 0;    % no processing
-    Event(n).seqControl = PRF; %100us per detect
-    n = n+1;
-end
-
-% Event(n-1).seqControl = 0;
-lastTTHnsc = 0;
-Event(n).info = 'transfer data to Host';
-Event(n).tx = 0;         % no transmit
-Event(n).rcv = 0;        % no rcv
-Event(n).recon = 0;      % no reconstruction
-Event(n).process = 0;    % no process
-Event(n).seqControl = nsc;
-SeqControl(nsc).command = 'transferToHost'; % transfer frame to host buffer
-SeqControl(nsc).condition = 'waitForProcessing';
-SeqControl(nsc).argument = lastTTHnsc;
-firstTTHnsc = nsc;
-nsc = nsc+1;
+Event(n).seqControl = TCPDP;
 n = n+1;
 
-Event(n).info = 'demodulate to IQ';
-Event(n).tx = 0;         % no transmit
-Event(n).rcv = 0;        % no rcv
-Event(n).recon = 3;      % reconstruction
-Event(n).process = 0;    % process
-Event(n).seqControl = [nsc,nsc+1,nsc+2];
-SeqControl(nsc).command = 'waitForTransferComplete';
-SeqControl(nsc).argument = firstTTHnsc;
-nsc = nsc+1;
-SeqControl(nsc).command = 'markTransferProcessed';
-SeqControl(nsc).argument = firstTTHnsc;
-nsc = nsc+1;
-SeqControl(nsc).command = 'sync';
-nsc = nsc+1;
-n = n+1;
-
-%
-Event(n).info = 'trigger out'; % Only needed for verifying push waveform with scope.
-Event(n).tx = 0;
-Event(n).rcv = 0;
-Event(n).recon = 0;
-Event(n).process = 0;
-Event(n).seqControl = [15];
-n = n+1;
-%
-
-
-
-for j = 1:ne                      % Acquire frame na=50
-    for ii=1:nv
-        Event(n).info = 'Acquire data';
-        Event(n).tx = na+ii; %  PWNum*PWFocusXNum+numRays+1;
-        Event(n).rcv =na*BmodeFrames+nv*(j-1)+ii; %numRays*BmodeFrames+j;%%%
-        Event(n).recon = 0;      % no reconstruction.
-        Event(n).process = 0;    % no processing
-        Event(n).seqControl = [PRF]; %100us per detect
-        n = n+1;
+ind = na*BmodeFrames;
+for N = 1:Resource.RcvBuffer(2).numFrames
+    for j = 1:ne
+        for ii=1:na
+            Event(n).info = 'Acquire data';
+            Event(n).tx = ii; %  PWNum*PWFocusXNum+numRays+1;
+            Event(n).rcv = ind+na*(j-1)+ii; %numRays*BmodeFrames+j;%%%
+            Event(n).recon = 0;      % no reconstruction.
+            Event(n).process = 0;    % no processing
+            Event(n).seqControl = [TTNAQ]; %100us per detect
+            n = n+1;
+        end
     end
+    Event(n-1).seqControl = [TTNAQ,nsc];
+    SeqControl(nsc).command = 'transferToHost'; % transfer frame to host buffer
+    nsc = nsc+1;
+
+
+    Event(n).info = 'reconstruct to IQ';
+    Event(n).tx = 0;         % no transmit
+    Event(n).rcv = 0;        % no rcv
+    Event(n).recon = 2;      % reconstruction
+    Event(n).process = 0;    % no process
+    Event(n).seqControl = 0;
+    n = n+1;
+
+    Event(n).info = 'Save one frame data';
+    Event(n).tx = 0;         % no transmit
+    Event(n).rcv = 0;        % no rcv
+    Event(n).recon = 0;      % no recon
+    Event(n).process = 4;    % save
+    Event(n).seqControl = 0;
+    n = n+1;
+
+    ind = ind + na*ne;
 end
 
-Event(n-1).seqControl = 0;
-
-Event(n).info = 'transfer data to Host';
-Event(n).tx = 0;         % no transmit
-Event(n).rcv = 0;        % no rcv
-Event(n).recon = 0;      % no reconstruction
-Event(n).process = 0;    % no process
-Event(n).seqControl = nsc;
-SeqControl(nsc).command = 'transferToHost'; % transfer frame to host buffer
-SeqControl(nsc).condition = 'waitForProcessing';
-SeqControl(nsc).argument = firstTTHnsc;
-lastTTHnsc = nsc;
-SeqControl(firstTTHnsc).argument = lastTTHnsc;
-nsc = nsc+1;
-n = n+1;
-
-Event(n).info = 'ext func to process IQ';
-Event(n).tx = 0;         % no transmit
-Event(n).rcv = 0;        % no rcv
-Event(n).recon = 2;      % reconstruction
-Event(n).process = [2];    % process
-Event(n).seqControl = [nsc];
-SeqControl(nsc).command = 'waitForTransferComplete';
-SeqControl(nsc).argument = lastTTHnsc;
-nsc = nsc+1;
-% SeqControl(nsc).command = 'markTransferProcessed';
-% SeqControl(nsc).argument = lastTTHnsc;
-% nsc = nsc+1;
-% SeqControl(nsc).command = 'sync';
-% nsc = nsc+1;
-n = n+1;
-
-Event(n).info = 'ext func to save data';
-Event(n).tx = 0;         % no transmit
-Event(n).rcv = 0;        % no rcv
-Event(n).recon = 0;      % reconstruction
-%Event(n).process = [5];    % process
-Event(n).process = 0;    % no process
-Event(n).seqControl = [nsc,nsc+1];
-% SeqControl(nsc).command = 'waitForTransferComplete';
-% SeqControl(nsc).argument = lastTTHnsc;
-% nsc = nsc+1;
-SeqControl(nsc).command = 'markTransferProcessed';
-SeqControl(nsc).argument = lastTTHnsc;
-nsc = nsc+1;
-SeqControl(nsc).command = 'sync';
-nsc = nsc+1;
-n = n+1;
 
 Event(n).info = 'Jump back to first event';
 Event(n).tx = 0;        % no TX
@@ -683,18 +522,12 @@ Event(n).rcv = 0;       % no Rcv
 Event(n).recon = 0;     % no Recon
 Event(n).process = 0;
 Event(n).seqControl = nsc; % jump command
-SeqControl(nsc).command = 'loopTst';
-SeqControl(nsc).argument = nStartDoppler+2;
+SeqControl(nsc).command = 'jump';
+SeqControl(nsc).argument = nStartDoppler+1;
 nsc = nsc + 1;
 n = n+1;
 
-Event(n).info = 'TPC 2D';
-Event(n).tx = 0;
-Event(n).rcv = 0;
-Event(n).recon = 0;
-Event(n).process = 0;
-Event(n).seqControl = 14;
-n = n+1;
+
 
 %% User specified UI Control Elements
 
@@ -834,8 +667,7 @@ frameRateFactor = ne;
 
 
 % Save all the structures to a .mat file.
-save(filename);
-VSX
+save(['MatFiles\',filename]);
 
 return
 
@@ -926,6 +758,8 @@ freeze = evalin('base','freeze');
 figClose = evalin('base','figClose');
 pn = evalin('base','pn');
 
+
+
 if(isempty(pn))
     pn = uigetdir;
     assignin('base','pn',pn);
@@ -936,17 +770,16 @@ if freeze == 1 && figClose == 0
     
     Control.Command = 'copyBuffers';
     runAcq(Control); % NOTE:  If runAcq() has an error, it reports it then exits MATLAB.
-%     Velocity = evalin('base','VelocityData');
-    Velocity = evalin('base','MovieDataV');
-    ROIinfo = evalin('base','ROIinfo');
     para = evalin('base','para');
+    ROIinfo = evalin('base','ROIinfo');
     
+
 
     assignin('base','replay','off');
     set(UI(8).handle,'Visible','on');
     set(UI(9).handle,'Visible','off');
     if ~isempty(pn) % fn will be zero if user hits cancel       
-        savefast([pn,'\Data',int2str(savingNum),'.mat'],'para','ROIinfo','IQData','Velocity','RcvData');
+        savefast([pn,'\Data',int2str(savingNum),'.mat'],'IQData','para','IQData','ROIinfo');
         disp('data done');        
         fprintf('The shearwave data has been saved at %s \n',pn);
         savingNum = savingNum + 1;
@@ -1147,8 +980,8 @@ DPIHandle = evalin('base','DPIHandle');
 bmodeHandle = evalin('base','Resource.DisplayWindow(1).figureHandle');
 Fc = evalin('base','Fc');
 c = evalin('base','Resource.Parameters.speedOfSound');
-DetectTprf = evalin('base','DetectTprf');
-nv = evalin('base','nv');
+PRTus = evalin('base','DetectTprf');
+na = evalin('base','na');
 
 
 Format = evalin('base','Format');
@@ -1218,7 +1051,7 @@ switch figClose
             Imp = (Q(:,:,1)-ImMean).*(I(:,:,2)-ReMean) - (I(:,:,1)-ReMean).*(Q(:,:,2)-ImMean);
             Rep = (I(:,:,1)-ReMean).*(I(:,:,2)-ReMean) + (Q(:,:,1)-ImMean).*(Q(:,:,2)-ImMean);
             Power = (Imp .* Imp + Rep .* Rep).^0.125;
-            VelocityMov = c/(4*pi*Fc*DetectTprf*1e-6*nv)*atan2(Im(:,:,1),Re(:,:,1));
+            VelocityMov = c/(4*pi*Fc*PRTus*1e-6*na)*atan2(Im(:,:,1),Re(:,:,1));
 %             Velocity(:,:,1) = VelocityMov;
             %       Velocity(:,:,1) = medfilt2(Velocity(:,:,1),[3 3]);
             
@@ -1249,7 +1082,7 @@ switch figClose
             Rep = (I(:,:,i)-ReMean).*(I(:,:,i+1)-ReMean) + (Q(:,:,i)-ImMean).*(Q(:,:,i+1)-ImMean);
             Power = (Imp .* Imp + Rep .* Rep).^0.125;
             %         Power = medfilt2(Power,[3,3]);
-            VelocityMov = c/(4*pi*Fc*DetectTprf*1e-6*nv)*atan2(Im(:,:,i),Re(:,:,i));
+            VelocityMov = c/(4*pi*Fc*PRTus*1e-6*na)*atan2(Im(:,:,i),Re(:,:,i));
 %                     VelocityMov = medfilt2(VelocityMov,[3,3]);
             MovieDataP(:,:,i) = Power;
             MovieDataV(:,:,i) = VelocityMov;
@@ -1415,49 +1248,28 @@ return
 
 
 %-EF#4
-SavingAddress(varargin)
-% 
-
-    assignin('base','pn',pn);
-    assignin('base','Dnum',0);
-
+SavingData(RcvData)
+%
+Dnum = evalin('base','Dnum');
+para = evalin('base','para');
+ROIinfo = evalin('base','ROIinfo');
+IQBuffer = evalin('base','IQBuffer');
+pn = evalin('base','pn');
+if ~isempty(pn) % fn will be zero if user hits cancel
+    savefast([pn,'\Data',int2str(Dnum),'.mat'],'para','ROIinfo','IQBuffer');
+    fprintf('The %dth data has been saved at ',Dnum);
+else
+    disp('The data is not saved.');
+end
+Dnum
+Dnum = Dnum+1;
+assignin('base','Dnum',Dnum);
 
 return
-
 %-EF#4
 
-%-EF#5
-SavingData(RcvData)
-% 
-        Dnum = evalin('base','Dnum');
-        para = evalin('base','para');
-         Velocity = evalin('base','MovieDataV');
-         ROIinfo = evalin('base','ROIinfo');
-         IQBuffer = evalin('base','IQBuffer');
-
-
-         pn = evalin('base','pn');
- 
-    if ~isequal(pn,0) % fn will be zero if user hits cancel
-        
-        savefast([pn,'\Data',int2str(Dnum),'.mat'],'para','ROIinfo','RcvData','IQBuffer','Velocity');
-        disp('data done');
-        
-        fprintf('The data has been saved at %s \n',pn);
-    else
-        disp('The data is not saved.');
-    end
-    Dnum
-Dnum = Dnum+1;
-        assignin('base','Dnum',Dnum);
-
-
-return
 
 %-EF#5
-
-
-%-EF#6
 closeIQfig(varargin)
 
 exitValue = evalin('base','vsExit');
@@ -1476,4 +1288,4 @@ if freeze  % if GUI is freeze, delete and assign 2 to figClose
 end
 
 return
-%-EF#6
+%-EF#5
