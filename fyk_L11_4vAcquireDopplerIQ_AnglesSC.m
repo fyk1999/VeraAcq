@@ -13,11 +13,12 @@
 
 
 %% System parameters
-clear %all
+clear;
 
 filename = ('fyk_L11_4vAcquireDopplerIQ_AnglesSC');
 pn = uigetdir;
 Dnum = 1;
+SavingNum = 10;
 
 EXPtimes = 200;
 ScaleMax = 500;  % scaling of the display function
@@ -29,10 +30,10 @@ ne = 10;         % Set ne = number of detect acquisitions.
 BmodeFrames = 10;
 DopplerFrames = 100;
 
-maxVoltage = 75;
+maxVoltage = 61;
 Fc = 6.25e6;
 na  = 3;%number of views (angles) for compound imaging, can be even or odd
-PRTus = 120; % in us
+PRTus = 200; % in us
 PRF = 1/(na*PRTus*1e-6);
 dtheta = (12*pi/180)/(na);        %increment of angle:-2,0,2
 startAngle = -(na-1)/2*dtheta;
@@ -64,7 +65,7 @@ Format.startDepth = 50;   % Acquisition depth in wavelengths150
 Format.endDepth = 256;   % This should preferrably be a multiple of 128 samples.300
 
 DPIFocusX = 0;
-DPIFcousZ = Format.endDepth-(Format.endDepth-Format.startDepth)/2;%65;
+DPIFocusZ = Format.endDepth-(Format.endDepth-Format.startDepth)/2;%65;
 DPIROI = [120 (Format.endDepth-Format.startDepth)/2];  % [width in element number (mush be even), depth in wavelength]
 
 DPIRoiOffset.x = 0; % ROI offset in X direction
@@ -84,7 +85,7 @@ PData(1).Region(1).Shape = struct(...
     'height', Format.endDepth-Format.startDepth);
 PData(1).Region(2).Shape = struct(...
     'Name','Rectangle',...
-    'Position',[DPIFocusX,0,DPIFcousZ-DPIROI(2)/2],...
+    'Position',[DPIFocusX,0,DPIFocusZ-DPIROI(2)/2],...
     'width', DPIROI(1),...
     'height', DPIROI(2));
 PData(1).Region = computeRegions(PData(1));
@@ -364,9 +365,11 @@ Process(3).Parameters = {'srcbuffer','none'};
 
 Process(4).classname = 'External';
 Process(4).method = 'SavingData';
-Process(4).Parameters = {'srcbuffer','receive',... % name of buffer to process.
+Process(4).Parameters = {'srcbuffer','inter',... % name of buffer to process.
     'srcbufnum',2,...
+    'srcframenum',1,...
     'dstbuffer','none'};
+    
 %% SeqControl and Events
 % - Noop to allow time for charging external cap.
 SeqControl(1).command = 'noop';
@@ -449,7 +452,7 @@ for ii = 1:Resource.RcvBuffer(1).numFrames   %Resource.RcvBuffer(1).numFrames = 
     Event(n).tx = 0;         % no transmit
     Event(n).rcv = 0;        % no rcv
     Event(n).recon = 0;      % reconstruction
-    Event(n).process = 3;    % process
+    Event(n).process = 0;    % process
     Event(n).seqControl = RTML;
     n = n+1;
     
@@ -491,7 +494,7 @@ for N = 1:Resource.RcvBuffer(2).numFrames
             n = n+1;
         end
     end
-    Event(n-1).seqControl = [TTNAQ,nsc];
+    Event(n-1).seqControl = [TTNAQ,nsc,RTML];
     SeqControl(nsc).command = 'transferToHost'; % transfer frame to host buffer
     nsc = nsc+1;
 
@@ -602,7 +605,8 @@ UI(10).Control = {'Style','pushbutton',...
     'Callback',{@saveIQ}};
 UI(10).Callback = text2cell('%-UI#10Callback');
 
-UI(13).Statement = 'set(Resource.DisplayWindow(1).figureHandle,''WindowButtonDownFcn'',{@focusAdj,''focusAdj''});';
+%???????????!!!!!!!!!!!!!!!!!!
+UI(13).Statement = "set(Resource.DisplayWindow(1).figureHandle,'WindowButtonDownFcn',@focusAdj);";
 
 % ROI adjustment
 UI(11).Control = {'UserB3','Style','VsSlider','Label','ROI Width',...
@@ -804,7 +808,7 @@ na = evalin('base','numRays');
 WBFactor = evalin('base','WBFactor');
 
 DPIFocusX = evalin('base','DPIFocusX');
-DPIFcousZ = evalin('base','DPIFocusZ');
+DPIFocusZ = evalin('base','DPIFocusZ');
 
 
 if mod(UIValue,2)==1
@@ -816,12 +820,12 @@ end
 assignin('base','DPIROI',DPIROI);
 
 x = DPIFocusX;
-z = DPIFcousZ;
+z = DPIFocusZ;
 
 % change PData(1) size
 PData(1).Region(2).Shape = struct(...
     'Name','Rectangle',...
-    'Position',[DPIFocusX,0,DPIFcousZ-DPIROI(2)/2],...
+    'Position',[DPIFocusX,0,DPIFocusZ-DPIROI(2)/2],...
     'width', DPIROI(1),...
     'height', DPIROI(2));
 PData(1).Region = computeRegions(PData(1));
@@ -854,19 +858,19 @@ na = evalin('base','numRays');
 WBFactor = evalin('base','WBFactor');
 
 DPIFocusX = evalin('base','DPIFocusX');
-DPIFcousZ = evalin('base','DPIFocusZ');
+DPIFocusZ = evalin('base','DPIFocusZ');
 
 
 DPIROI(2) = UIValue;
 assignin('base','DPIROI',DPIROI);
 
 x = DPIFocusX;
-z = DPIFcousZ;
+z = DPIFocusZ;
 
 % change PData(1) size
 PData(1).Region(2).Shape = struct(...
     'Name','Rectangle',...
-    'Position',[DPIFocusX,0,DPIFcousZ-DPIROI(2)/2],...
+    'Position',[DPIFocusX,0,DPIFocusZ-DPIROI(2)/2],...
     'width', DPIROI(1),...
     'height', DPIROI(2));
 PData(1).Region = computeRegions(PData(1));
@@ -897,11 +901,11 @@ figClose = evalin('base','figClose');
 
 % if freeze == 0 && figClose == 0
 if figClose == 0
-    
+
     % change the start event
-    CurrentState = get(UI(14).handle,'String');
-    
-    if strcmp(CurrentState,'Measure')
+%     CurrentState = get(UI(14).handle,'String')
+% 
+%     if strcmp(CurrentState,'Measure')
         
         nStart = evalin('base','nStartDoppler');
         Control = evalin('base','Control');
@@ -911,17 +915,18 @@ if figClose == 0
         assignin('base','Control',Control);
         set(UI(14).handle,'String','Monitor')
         
-    else
-        
-        nStart = 1;
-        Control = evalin('base','Control');
-        Control.Command = 'set&Run';
-        Control.Parameters = {'Parameters',1,'startEvent',nStart};
-        evalin('base',['Resource.Parameters.startEvent =',num2str(nStart),';']);
-        assignin('base','Control',Control);
-        set(UI(14).handle,'String','Measure')
-        
-    end
+%     else
+% 
+%         nStart = 1;
+%         Control = evalin('base','Control');
+%         Control.Command = 'set&Run';
+%         Control.Parameters = {'Parameters',1,'startEvent',nStart};
+%         evalin('base',['Resource.Parameters.startEvent =',num2str(nStart),';']);
+%         assignin('base','Control',Control);
+%         set(UI(14).handle,'String','Measure')
+%         
+%                 disp('yes')
+%     end
     
 end
 return
@@ -986,7 +991,7 @@ na = evalin('base','na');
 
 Format = evalin('base','Format');
 DPIFocusX = evalin('base','DPIFocusX');
-DPIFcousZ = evalin('base','DPIFocusZ');
+DPIFocusZ = evalin('base','DPIFocusZ');
 
 switch figClose
     case 1  % not freeze status, but fig has been closed
@@ -1024,7 +1029,7 @@ switch figClose
             assignin('base','adjStatus',0);
             
             x = DPIFocusX;
-            z =  DPIFcousZ;
+            z =  DPIFocusZ;
             
             axisChannel = linspace((x-DPIROI(1)/2),(x+DPIROI(1)/2),x);
             axisDepth   = linspace((z-DPIROI(2)/2),(z+DPIROI(2)/2),z);
@@ -1137,7 +1142,7 @@ na = evalin('base','numRays');
 WBFactor = evalin('base','WBFactor');
 
 DPIFocusX = evalin('base','DPIFocusX');
-DPIFcousZ = evalin('base','DPIFocusZ');
+DPIFocusZ = evalin('base','DPIFocusZ');
 
 
 
@@ -1150,7 +1155,7 @@ if checkFocusAdj == 2 && freeze == 0
     
     pos = get(bmodeAxes,'CurrentPoint');
     DPIFocusX = round(pos(1));
-    DPIFcousZ = round(pos(3));
+    DPIFocusZ = round(pos(3));
     assignin('base','adjStatus',1);
     
     PData = evalin('base','PData');
@@ -1161,7 +1166,7 @@ if checkFocusAdj == 2 && freeze == 0
     
     PData(1).Region(2).Shape = struct(...
         'Name','Rectangle',...
-        'Position',[DPIFocusX,0,DPIFcousZ-DPIROI(2)/2],...
+        'Position',[DPIFocusX,0,DPIFocusZ-DPIROI(2)/2],...
         'width', DPIROI(1),...
         'height', DPIROI(2));
     PData(1).Region = computeRegions(PData(1));
@@ -1171,7 +1176,7 @@ if checkFocusAdj == 2 && freeze == 0
     
     assignin('base','PData',PData);
     assignin('base','DPIFocusX', DPIFocusX);
-    assignin('base','DPIFocusZ', DPIFcousZ);
+    assignin('base','DPIFocusZ', DPIFocusZ);
     
     Control.Command = 'update&Run';
     Control.Parameters = {'PData','Recon'};
@@ -1200,7 +1205,7 @@ bmodeHandle = evalin('base','Resource.DisplayWindow(1).figureHandle');
 % PWMiddleIndex = evalin('base','PWMiddleIndex');
 
 DPIFocusX = evalin('base','DPIFocusX');
-DPIFcousZ = evalin('base','DPIFocusZ');
+DPIFocusZ = evalin('base','DPIFocusZ');
 
 switch figClose
     
@@ -1221,7 +1226,7 @@ switch figClose
             
             %         assignin('base','adjStatus',0);
             x = DPIFocusX;
-            z = DPIFcousZ;
+            z = DPIFocusZ;
             
             % Mark on bmode figure
             if ishandle(bmodeHandle)
@@ -1243,27 +1248,32 @@ switch figClose
         
 end
 
+assignin('base','DPIFocusX',DPIFocusX);
+assignin('base','DPIFocusZ',DPIFocusZ);
+
 return
 %-EF#3
 
 
 %-EF#4
-SavingData(RcvData)
+SavingData(IBuffer,QBuffer)
 %
 Dnum = evalin('base','Dnum');
 para = evalin('base','para');
 ROIinfo = evalin('base','ROIinfo');
-IQBuffer = evalin('base','IQBuffer');
 pn = evalin('base','pn');
-if ~isempty(pn) % fn will be zero if user hits cancel
-    savefast([pn,'\Data',int2str(Dnum),'.mat'],'para','ROIinfo','IQBuffer');
-    fprintf('The %dth data has been saved at ',Dnum);
-else
-    disp('The data is not saved.');
+SavingNum = evalin('base','SavingNum');
+
+if Dnum <= SavingNum
+    if ~isempty(pn) % fn will be zero if user hits cancel
+        savefast([pn,'\Data',int2str(Dnum),'.mat'],'IBuffer');
+        fprintf('The %dth data has been saved!\n ',Dnum);
+        Dnum = Dnum+1;
+        assignin('base','Dnum',Dnum);
+    else
+        disp('The data is not saved.');
+    end
 end
-Dnum
-Dnum = Dnum+1;
-assignin('base','Dnum',Dnum);
 
 return
 %-EF#4
