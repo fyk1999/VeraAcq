@@ -17,7 +17,6 @@ clear;
 
 filename = ('fyk_L11_4vAcquireDopplerIQ_AnglesSC');
 pn = uigetdir;
-Dnum = 1;
 SavingNum = 10;
 
 EXPtimes = 200;
@@ -534,47 +533,36 @@ UIPos(:,2,1) = 0.0:0.1:0.9;
 UIPos(:,2,2) = 0.0:0.1:0.9;
 UIPos(:,2,3) = 0.0:0.1:0.9;
 
-% Define slider group offsets and sizes. All units are normalized.
-SG = struct('TO',[0.0,0.0975],...   % title offset
-    'TS',[0.25,0.025],...   % title size
-    'TF',0.8,...            % title font size
-    'SO',[0.0,0.06],...     % slider offset
-    'SS',[0.25,0.031],...   % slider size
-    'EO',[0.075,0.031],...   % edit box offset
-    'ES',[0.11,0.031]);     % edit box size
-
-
-
 
 % The follow UIs are not using User##
 Pos = UIPos(2,:,3);
 
 
-
-% Measure
-UI(14).Control = {'Style','pushbutton',...
-    'String','Measure',...
+import vsv.seq.uicontrol.VsPushButton;
+UI(1).Control = VsPushButton('String','Measure',...
     'Units','normalized',...
     'Position',[Pos+[-0.13 0.05],0.12,0.04],...
     'FontUnits','normalized',...
     'FontSize',0.5,...
-    'Callback',{@measure}};
-UI(14).Callback = text2cell('%-UI#14Callback');
+    'Callback',@measure);
 
-UI(15).Control = {'UserC3','Style','VsSlider','Label','ScaleRange',...
+Import vsv.seq.uicontrol.VsSliderControl;
+UI(2).Control = {'UserC3','Label','ScaleRange',...
     'SliderMinMaxVal',[-50,50,ScaleRange],...
-    'SliderStep',[0.01,0.01],'ValueFormat','%3.0f'};
-UI(15).Callback = text2cell('%-UI#15Callback');
+    'SliderStep',[0.01,0.01],'ValueFormat','%3.0f'...
+    'Callback',@scaleChange};
 
-UI(16).Control = {'UserC2','Style','VsSlider','Label','ScaleOffset',...
+
+UI(3).Control = {'UserC2','Style','VsSlider','Label','ScaleOffset',...
     'SliderMinMaxVal',[-50,50,ScaleOffset],...
-    'SliderStep',[0.01,0.01],'ValueFormat','%3.0f'};
-UI(16).Callback = text2cell('%-UI#16Callback');
+    'SliderStep',[0.01,0.01],'ValueFormat','%3.0f'...
+    'Callback',@scaleOffsetChange};
+
 % 
 VPAdj = 1;
-UI(17).Control = {'UserC4','Style','VsButtonGroup','Title','Velocity/Power Adjustment',...
+UI(4).Control = {'UserC4','Style','VsButtonGroup','Title','Velocity/Power Adjustment',...
     'NumButtons',2,'Labels',{'Velocity','Power'}};
-UI(17).Callback = {'assignin(''base'',''VPAdj'',UIState)'};
+UI(4).Callback = {'assignin(''base'',''VPAdj'',UIState)'};
 
 
 % External function definitions
@@ -589,7 +577,7 @@ UI(17).Callback = {'assignin(''base'',''VPAdj'',UIState)'};
 % @ sign. You can now mark this function handle, and right click and then
 % select 'Open runTimeMon' and the editor will jump to the function
 % definition in your script
-EF(1).Function = vsv.seq.function.ExFunctionDef('savingIQData', @()savingIQData(obj1,obj2));
+EF(1).Function = vsv.seq.function.ExFunctionDef('savingIQData', @savingIQData);
 
 
 
@@ -715,65 +703,12 @@ return
 %-UI#12Callback
 
 
-%-UI#14Callback
-measure(varargin)
 
-UI = evalin('base','UI');
-freeze = evalin('base','freeze');
-figClose = evalin('base','figClose');
 
-% if freeze == 0 && figClose == 0
-if figClose == 0
 
-    % change the start event
-%     CurrentState = get(UI(14).handle,'String')
-% 
-%     if strcmp(CurrentState,'Measure')
-        
-        nStart = evalin('base','nStartDoppler');
-        Control = evalin('base','Control');
-        Control.Command = 'set&Run';
-        Control.Parameters = {'Parameters',1,'startEvent',nStart};
-        evalin('base',['Resource.Parameters.startEvent =',num2str(nStart),';']);
-        assignin('base','Control',Control);
-        set(UI(14).handle,'String','Monitor')
-        
-%     else
-% 
-%         nStart = 1;
-%         Control = evalin('base','Control');
-%         Control.Command = 'set&Run';
-%         Control.Parameters = {'Parameters',1,'startEvent',nStart};
-%         evalin('base',['Resource.Parameters.startEvent =',num2str(nStart),';']);
-%         assignin('base','Control',Control);
-%         set(UI(14).handle,'String','Measure')
-%         
-%                 disp('yes')
-%     end
-    
-end
-return
-%-UI#14Callback
 
-%-UI#15Callback - ScaleRange change
-ScaleMax = evalin('base','ScaleMax');
-ScaleMin = evalin('base','ScaleMin');
-ScaleRange = evalin('base','ScaleRange');
-ScaleOffset = evalin('base','ScaleOffset');
-
-ScaleRange = UIValue;
-ScaleMax = sign(ScaleOffset)*2^abs(ScaleOffset) + 2^ScaleRange;
-ScaleMin = sign(ScaleOffset)*2^abs(ScaleOffset) - 2^ScaleRange;
-disp([' ScaleMin = ',num2str(ScaleMin),'ScaleMax = ',num2str(ScaleMax)]);
-
-assignin('base','ScaleMax',ScaleMax);
-assignin('base','ScaleMin',ScaleMin);
-assignin('base','ScaleRange',ScaleRange);
-assignin('base','ScaleOffset',ScaleOffset);
-
-return
-
-%-UI#16Callback - ScaleOffset change
+% - Scale Offset Change
+function scaleOffsetChange(~,~,UIValue)
 ScaleMax = evalin('base','ScaleMax');
 ScaleRange = evalin('base','ScaleRange');
 ScaleOffset = evalin('base','ScaleOffset');
@@ -788,14 +723,14 @@ assignin('base','ScaleMin',ScaleMin);
 assignin('base','ScaleRange',ScaleRange);
 assignin('base','ScaleOffset',ScaleOffset);
 
-return
+end
 
 %% External functions
 
-
+% - saving iq buffer data
 function SavingIQData(IBuffer,QBuffer)
 %
-    Dnum = evalin('base','Dnum');
+    persistent Dnum = 1;
     para = evalin('base','para');
     ROIinfo = evalin('base','ROIinfo');
     pn = evalin('base','pn');
@@ -814,3 +749,57 @@ function SavingIQData(IBuffer,QBuffer)
 
 end
 
+
+
+%% Callback functions
+
+% - measure, switch between B-mode and Doppler
+function measure(~,~,UIValue)
+
+    UI = evalin('base','UI');
+    figClose = evalin('base','figClose');
+    
+    % if freeze == 0 && figClose == 0
+    if figClose == 0 
+        disp(UIValue);
+        if strcmp(UIValue,1)
+            nStart = evalin('base','nStartDoppler');
+            Control = evalin('base','Control');
+            Control.Command = 'set&Run';
+            Control.Parameters = {'Parameters',1,'startEvent',nStart};
+            evalin('base',['Resource.Parameters.startEvent =',num2str(nStart),';']);
+            assignin('base','Control',Control);
+            set(UI(14).handle,'String','Monitor')
+        else
+            nStart = 1;
+            Control = evalin('base','Control');
+            Control.Command = 'set&Run';
+            Control.Parameters = {'Parameters',1,'startEvent',nStart};
+            evalin('base',['Resource.Parameters.startEvent =',num2str(nStart),';']);
+            assignin('base','Control',Control);
+            set(UI(14).handle,'String','Measure')
+            
+        end
+    
+    end
+end
+
+
+% - Scale Change
+function scaleChange(~,~,UIValue)
+ScaleMax = evalin('base','ScaleMax');
+ScaleMin = evalin('base','ScaleMin');
+ScaleRange = evalin('base','ScaleRange');
+ScaleOffset = evalin('base','ScaleOffset');
+
+ScaleRange = UIValue;
+ScaleMax = sign(ScaleOffset)*2^abs(ScaleOffset) + 2^ScaleRange;
+ScaleMin = sign(ScaleOffset)*2^abs(ScaleOffset) - 2^ScaleRange;
+disp([' ScaleMin = ',num2str(ScaleMin),'ScaleMax = ',num2str(ScaleMax)]);
+
+assignin('base','ScaleMax',ScaleMax);
+assignin('base','ScaleMin',ScaleMin);
+assignin('base','ScaleRange',ScaleRange);
+assignin('base','ScaleOffset',ScaleOffset);
+
+end
