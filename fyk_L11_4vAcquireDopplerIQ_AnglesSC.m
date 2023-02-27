@@ -25,7 +25,7 @@ ScaleMax = 500;  % scaling of the display function
 ScaleMin = 0;  % scaling of the display function
 ScaleRange = 0;  % scaling of the display function
 ScaleOffset = 0;  % scaling of the display function
-ne = 10;         % Set ne = number of detect acquisitions.
+ne = 50;         % Set ne = number of detect acquisitions.
 % DPIFrames   = 1;
 BmodeFrames = 10;
 DopplerFrames = 100;
@@ -44,7 +44,7 @@ WBFactor = 1.8;  %  control the element size for wide beam detect
 Resource.Parameters.numTransmit = 128;      % number of transmit channels.
 Resource.Parameters.numRcvChannels = 128;    % number of receive channels.
 Resource.Parameters.speedOfSound = 1540;    % set speed of sound in m/sec before calling computeTrans
-Resource.Parameters.simulateMode = 1;
+Resource.Parameters.simulateMode = 0;
 
 
 % Specify Trans structure array.
@@ -61,7 +61,7 @@ Trans.maxHighVoltage = maxVoltage;  % set maximum high voltage limit for pulser 
 % Specify Format structure array.
 Format.transducer = 'L11-4v';   % 128 element linear array
 Format.scanFormat = 'RLIN';     % rectangular linear array scan
-Format.startDepth = 50;   % Acquisition depth in wavelengths150
+Format.startDepth = 100;   % Acquisition depth in wavelengths150
 Format.endDepth = 256;   % This should preferrably be a multiple of 128 samples.300
 
 DPIFocusX = 0;
@@ -364,7 +364,7 @@ Process(3).method = 'DrawROI';
 Process(3).Parameters = {'srcbuffer','none'};
 
 Process(4).classname = 'External';
-Process(4).method = 'SavingData';
+Process(4).method = 'SavingIQData';
 Process(4).Parameters = {'srcbuffer','inter',... % name of buffer to process.
     'srcbufnum',2,...
     'srcframenum',1,...
@@ -494,7 +494,7 @@ for N = 1:Resource.RcvBuffer(2).numFrames
             n = n+1;
         end
     end
-    Event(n-1).seqControl = [TTNAQ,nsc,RTML];
+    Event(n-1).seqControl = [TTNF,nsc,RTML];
     SeqControl(nsc).command = 'transferToHost'; % transfer frame to host buffer
     nsc = nsc+1;
 
@@ -1256,7 +1256,7 @@ return
 
 
 %-EF#4
-SavingData(IBuffer,QBuffer)
+SavingIQData(IBuffer,QBuffer)
 %
 Dnum = evalin('base','Dnum');
 para = evalin('base','para');
@@ -1266,7 +1266,7 @@ SavingNum = evalin('base','SavingNum');
 
 if Dnum <= SavingNum
     if ~isempty(pn) % fn will be zero if user hits cancel
-        savefast([pn,'\Data',int2str(Dnum),'.mat'],'IBuffer');
+        savefast([pn,'\Data',int2str(Dnum),'.mat'],'IBuffer','QBuffer');
         fprintf('The %dth data has been saved!\n ',Dnum);
         Dnum = Dnum+1;
         assignin('base','Dnum',Dnum);
