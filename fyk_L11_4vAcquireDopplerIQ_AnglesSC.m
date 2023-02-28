@@ -1266,7 +1266,7 @@ SavingNum = evalin('base','SavingNum');
 
 if Dnum <= SavingNum
     if ~isempty(pn) % fn will be zero if user hits cancel
-        savefast([pn,'\Data',int2str(Dnum),'.mat'],'IBuffer','QBuffer');
+        savefast([pn,'\Data',int2str(Dnum),'.mat'],'IBuffer','QBuffer','para','ROIinfo');
         fprintf('The %dth data has been saved!\n ',Dnum);
         Dnum = Dnum+1;
         assignin('base','Dnum',Dnum);
