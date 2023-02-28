@@ -358,6 +358,7 @@ Process(2).Parameters = {'srcbuffer','inter',... % name of buffer to process.
     'srcframenum',1,...
     'dstbuffer','none'};
     
+
 %% SeqControl and Events
 % - Noop to allow time for charging external cap.
 SeqControl(1).command = 'noop';
@@ -534,11 +535,9 @@ UIPos(:,2,2) = 0.0:0.1:0.9;
 UIPos(:,2,3) = 0.0:0.1:0.9;
 
 
-% The follow UIs are not using User##
-Pos = UIPos(2,:,3);
-
 
 import vsv.seq.uicontrol.VsPushButton;
+Pos = UIPos(2,:,3);
 UI(1).Control = VsPushButton('String','Measure',...
     'Units','normalized',...
     'Position',[Pos+[-0.13 0.05],0.12,0.04],...
@@ -546,26 +545,9 @@ UI(1).Control = VsPushButton('String','Measure',...
     'FontSize',0.5,...
     'Callback',@measure);
 
-Import vsv.seq.uicontrol.VsSliderControl;
-UI(2).Control = {'UserC3','Label','ScaleRange',...
-    'SliderMinMaxVal',[-50,50,ScaleRange],...
-    'SliderStep',[0.01,0.01],'ValueFormat','%3.0f'...
-    'Callback',@scaleChange};
 
 
-UI(3).Control = {'UserC2','Style','VsSlider','Label','ScaleOffset',...
-    'SliderMinMaxVal',[-50,50,ScaleOffset],...
-    'SliderStep',[0.01,0.01],'ValueFormat','%3.0f'...
-    'Callback',@scaleOffsetChange};
-
-% 
-VPAdj = 1;
-UI(4).Control = {'UserC4','Style','VsButtonGroup','Title','Velocity/Power Adjustment',...
-    'NumButtons',2,'Labels',{'Velocity','Power'}};
-UI(4).Callback = {'assignin(''base'',''VPAdj'',UIState)'};
-
-
-% External function definitions
+%% User specified External function
 
 % Create the External Processing function, using the new function handle
 % approach. Note that in this example no import was used. The user can
@@ -581,161 +563,31 @@ EF(1).Function = vsv.seq.function.ExFunctionDef('savingIQData', @savingIQData);
 
 
 
-% Handle for Shearwave figure
-DPIHandle = figure('Name','ShearWaveVisulization',...
-    'NumberTitle','off','Visible','off',...
-    'Position',[Resource.DisplayWindow(1).Position(1)+250, ... % left edge
-    Resource.DisplayWindow(1).Position(2), ... % bottom
-    [DPIROI(1)+3,DPIROI(2)]*7], ...            % width, height
-    'CloseRequestFcn',{@closeIQfig});
 
-
-% figClose is used for figclose function in shearwave visualization
-figClose = 0;
-
-% adjStatus is used for checking ROI or focus adjustment
-adjStatus = 1;
-
-% Specify factor for converting sequenceRate to frameRate.
-frameRateFactor = ne;
-
+%% Save .Mat file
 
 % Save all the structures to a .mat file.
 save(['MatFiles\',filename]);
-
+VSX
 return
 
-%% **** Callback routines to be converted by text2cell function. ****
 
-%-UI#11Callback - ROI Width change
-TX = evalin('base','TX');
-UI = evalin('base','UI');
-PData = evalin('base','PData');
-Trans = evalin('base','Trans');
-DPIROI = evalin('base','DPIROI');
-Format = evalin('base','Format');
-DPIHandle = evalin('base','DPIHandle');
-na = evalin('base','numRays');
-WBFactor = evalin('base','WBFactor');
-
-DPIFocusX = evalin('base','DPIFocusX');
-DPIFocusZ = evalin('base','DPIFocusZ');
-
-
-if mod(UIValue,2)==1
-    DPIROI(1) = UIValue+1;
-    set(UI(11).handle(3),'String',UIValue+1);
-else
-    DPIROI(1) = UIValue;
-end
-assignin('base','DPIROI',DPIROI);
-
-x = DPIFocusX;
-z = DPIFocusZ;
-
-% change PData(1) size
-PData(1).Region(2).Shape = struct(...
-    'Name','Rectangle',...
-    'Position',[DPIFocusX,0,DPIFocusZ-DPIROI(2)/2],...
-    'width', DPIROI(1),...
-    'height', DPIROI(2));
-PData(1).Region = computeRegions(PData(1));
-assignin('base','TX',TX);
-assignin('base','PData',PData);
-
-
-Control = evalin('base','Control');
-Control.Command = 'update&Run';
-Control.Parameters = {'TX','PData'};
-assignin('base','Control', Control);
-assignin('base','adjStatus',1);
-
-% pos = get(DPIHandle,'Position')
-% set(DPIHandle,'Position',[pos(1:2),[DPIROI(1)+3,DPIROI(2)]*7]);
-
-
-return
-%-UI#11Callback
-
-
-%-UI#12Callback - ROI Hight change
-TX = evalin('base','TX');
-PData = evalin('base','PData');
-Trans = evalin('base','Trans');
-DPIROI = evalin('base','DPIROI');
-Format = evalin('base','Format');
-DPIHandle = evalin('base','DPIHandle');
-na = evalin('base','numRays');
-WBFactor = evalin('base','WBFactor');
-
-DPIFocusX = evalin('base','DPIFocusX');
-DPIFocusZ = evalin('base','DPIFocusZ');
-
-
-DPIROI(2) = UIValue;
-assignin('base','DPIROI',DPIROI);
-
-x = DPIFocusX;
-z = DPIFocusZ;
-
-% change PData(1) size
-PData(1).Region(2).Shape = struct(...
-    'Name','Rectangle',...
-    'Position',[DPIFocusX,0,DPIFocusZ-DPIROI(2)/2],...
-    'width', DPIROI(1),...
-    'height', DPIROI(2));
-PData(1).Region = computeRegions(PData(1));
-assignin('base','TX',TX);
-assignin('base','PData',PData);
-
-
-Control = evalin('base','Control');
-Control.Command = 'update&Run';
-Control.Parameters = {'Format','TX','PData','Receive','Recon','DisplayWindow'};
-assignin('base','Control', Control);
-assignin('base','adjStatus',1);
-
-pos = get(DPIHandle,'Position')
-set(DPIHandle,'Position',[pos(1:2),[DPIROI(1)+3,DPIROI(2)]*7]);
-
-
-return
-%-UI#12Callback
-
-
-
-
-
-
-% - Scale Offset Change
-function scaleOffsetChange(~,~,UIValue)
-ScaleMax = evalin('base','ScaleMax');
-ScaleRange = evalin('base','ScaleRange');
-ScaleOffset = evalin('base','ScaleOffset');
-
-ScaleOffset = UIValue;
-ScaleMax = sign(ScaleOffset)*2^abs(ScaleOffset) + 2^ScaleRange;
-ScaleMin = sign(ScaleOffset)*2^abs(ScaleOffset) - 2^ScaleRange;
-disp([' ScaleMin = ',num2str(ScaleMin),'ScaleMax = ',num2str(ScaleMax)]);
-
-assignin('base','ScaleMax',ScaleMax);
-assignin('base','ScaleMin',ScaleMin);
-assignin('base','ScaleRange',ScaleRange);
-assignin('base','ScaleOffset',ScaleOffset);
-
-end
 
 %% External functions
 
 % - saving iq buffer data
 function SavingIQData(IBuffer,QBuffer)
 %
-    persistent Dnum = 1;
     para = evalin('base','para');
     ROIinfo = evalin('base','ROIinfo');
     pn = evalin('base','pn');
     SavingNum = evalin('base','SavingNum');
     
+    persistent Dnum ;
+    if isempty(Dnum)
+        Dnum = 1;
+    end
+
     if Dnum <= SavingNum
         if ~isempty(pn) % fn will be zero if user hits cancel
             savefast([pn,'\Data',int2str(Dnum),'.mat'],'IBuffer','QBuffer','para','ROIinfo');
@@ -793,6 +645,25 @@ ScaleRange = evalin('base','ScaleRange');
 ScaleOffset = evalin('base','ScaleOffset');
 
 ScaleRange = UIValue;
+ScaleMax = sign(ScaleOffset)*2^abs(ScaleOffset) + 2^ScaleRange;
+ScaleMin = sign(ScaleOffset)*2^abs(ScaleOffset) - 2^ScaleRange;
+disp([' ScaleMin = ',num2str(ScaleMin),'ScaleMax = ',num2str(ScaleMax)]);
+
+assignin('base','ScaleMax',ScaleMax);
+assignin('base','ScaleMin',ScaleMin);
+assignin('base','ScaleRange',ScaleRange);
+assignin('base','ScaleOffset',ScaleOffset);
+
+end
+
+
+% - Scale Offset Change
+function scaleOffsetChange(~,~,UIValue)
+ScaleMax = evalin('base','ScaleMax');
+ScaleRange = evalin('base','ScaleRange');
+ScaleOffset = evalin('base','ScaleOffset');
+
+ScaleOffset = UIValue;
 ScaleMax = sign(ScaleOffset)*2^abs(ScaleOffset) + 2^ScaleRange;
 ScaleMin = sign(ScaleOffset)*2^abs(ScaleOffset) - 2^ScaleRange;
 disp([' ScaleMin = ',num2str(ScaleMin),'ScaleMax = ',num2str(ScaleMax)]);
