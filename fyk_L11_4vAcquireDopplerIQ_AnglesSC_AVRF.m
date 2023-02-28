@@ -19,7 +19,6 @@ filename = ('fyk_L11_4vAcquireDopplerIQ_AnglesSC');
 pn = 'E:\FYK\20230227';
 
 
-
 ScaleMax = 500;  % scaling of the display function
 ScaleMin = 0;  % scaling of the display function
 ScaleRange = 0;  % scaling of the display function
@@ -37,7 +36,6 @@ PRF = 1/(na*PRTus*1e-6);
 dtheta = (12*pi/180)/(na);        %increment of angle:-2,0,2
 startAngle = -(na-1)/2*dtheta;
 
-WBFactor = 1.8;  %  control the element size for wide beam detect
 
 % Define system parameters.
 Resource.Parameters.numTransmit = 128;      % number of transmit channels.
@@ -352,12 +350,17 @@ Process(1).Parameters = {'imgbufnum',1, ...   % number of buffer to process.
 
 
 Process(2).classname = 'External';
-Process(2).method = 'SavingIQData';
+Process(2).method = 'saveIQData';
 Process(2).Parameters = {'srcbuffer','inter',... % name of buffer to process.
     'srcbufnum',2,...
     'srcframenum',1,...
     'dstbuffer','none'};
-    
+
+
+Process(3).classname = 'External';
+Process(3).method = 'drawROI';
+Process(3).Parameters = {'srcbuffer','none'};
+
 
 %% SeqControl and Events
 % - Noop to allow time for charging external cap.
@@ -402,7 +405,7 @@ nsc = 9;
 % Specify Event structure arrays.
 n = 1;
 
-nStartBMode = n;
+nStartMonitor = n;
 
 for ii = 1:Resource.RcvBuffer(1).numFrames   %Resource.RcvBuffer(1).numFrames = BmodeFrames=10;
     
@@ -441,7 +444,7 @@ for ii = 1:Resource.RcvBuffer(1).numFrames   %Resource.RcvBuffer(1).numFrames = 
     Event(n).tx = 0;         % no transmit
     Event(n).rcv = 0;        % no rcv
     Event(n).recon = 0;      % reconstruction
-    Event(n).process = 0;    % process
+    Event(n).process = 3;    % process
     Event(n).seqControl = RTML;
     n = n+1;
     
@@ -455,11 +458,11 @@ Event(n).recon = 0;     % no Recon
 Event(n).process = 0;
 Event(n).seqControl = nsc; % jump command
 SeqControl(nsc).command = 'jump';
-SeqControl(nsc).argument = nStartBMode;
+SeqControl(nsc).argument = nStartMonitor;
 nsc = nsc + 1;
 n = n+1;
 
-nStartDoppler = n;  
+nStartMeasure = n;  
 %
 
 Event(n).info = 'TPC Doppler';
@@ -515,7 +518,7 @@ Event(n).recon = 0;     % no Recon
 Event(n).process = 0;
 Event(n).seqControl = nsc; % jump command
 SeqControl(nsc).command = 'jump';
-SeqControl(nsc).argument = nStartDoppler+1;
+SeqControl(nsc).argument = nStartMeasure+1;
 nsc = nsc + 1;
 n = n+1;
 
@@ -535,7 +538,6 @@ UIPos(:,2,2) = 0.0:0.1:0.9;
 UIPos(:,2,3) = 0.0:0.1:0.9;
 
 
-
 import vsv.seq.uicontrol.VsButtonControl;
 Pos = UIPos(2,:,3);
 UI(1).Control = VsButtonControl('Label','Measure',...
@@ -544,6 +546,36 @@ UI(1).Control = VsButtonControl('Label','Measure',...
 %     'Units','normalized',...
 %     'FontUnits','normalized',...
 %     'FontSize',0.5,...
+
+
+% - Focus Adjustment, off: checkFocusAdj = 1, on: checkFocusAdj = 2
+import vsv.seq.uicontrol.VsButtonGroupControl;
+checkFocusAdj = 1;
+UI(2).Control = VsButtonGroupControl('LocationCode','UserB5',...
+    'Label','Focus Adjustment',...
+    'NumButtons',2,...
+    'Callback',@focusAdj);
+%'Labels',{'off','on'}
+
+
+
+% ROI adjustment
+import vsv.seq.uicontrol.VsSliderControl;
+UI(3).Control = VsSliderControl('LocationCode','UserB3', ...
+    'Label','ROI Width',...
+    'SliderMinMaxVal',[20,120,DPIROI(1)],...
+    'SliderStep',[2/80,10/80],'ValueFormat','%3.0f',...
+    'Callback',@widthChange);
+
+
+UI(4).Control = VsSliderControl('LocationCode','UserB2', ...
+    'Style','VsSlider','Label','ROI Hight',...
+    'SliderMinMaxVal',[20,(Format.endDepth-Format.startDepth),DPIROI(2)],...
+    'SliderStep',[2/100,10/100],'ValueFormat','%3.0f',...
+    'Callback',@heightChange);
+
+
+
 
 
 %% User specified External function
@@ -558,38 +590,59 @@ UI(1).Control = VsButtonControl('Label','Measure',...
 % @ sign. You can now mark this function handle, and right click and then
 % select 'Open runTimeMon' and the editor will jump to the function
 % definition in your script
-EF(1).Function = vsv.seq.function.ExFunctionDef('SavingIQData', @SavingIQData);
+EF(1).Function = vsv.seq.function.ExFunctionDef('saveIQData', @saveIQData);
+EF(2).Function = vsv.seq.function.ExFunctionDef('drawROI', @drawROI);
+
+
+%% other thing
+
+% Handle for Doppler figure
+dpiHandle = figure('Name','DopplerModeVisulization',...
+    'NumberTitle','off','Visible','off',...
+    'Position',[Resource.DisplayWindow(1).Position(1)+250, ... % left edge
+    Resource.DisplayWindow(1).Position(2), ... % bottom
+    [DPIROI(1)+3,DPIROI(2)]*7], ...            % width, height
+    'CloseRequestFcn',{@closeIQfig});
 
 
 
+% figClose is used for figclose function in shearwave visualization
+figClose = 0;
+
+% adjStatus is used for checking ROI or focus adjustment
+adjStatus = 1;
 
 %% Save .Mat file
 
 % Save all the structures to a .mat file.
 save(['MatFiles\',filename]);
-VSX
+%VSX
 return
 
 
 
 %% External functions
 
-% - saving iq buffer data
-function SavingIQData(IBuffer,QBuffer)
+% - save one frame of iq buffer data
+function saveIQData(IData,QData)
 %
     para = evalin('base','para');
     ROIinfo = evalin('base','ROIinfo');
     pn = evalin('base','pn');
-    SavingNum = evalin('base','SavingNum');
-    
+    IQB = evalin('base','IQData(1)');   % TRY ??? !!!
+
+    persistent savingNum;
     persistent Dnum ;
     if isempty(Dnum)
         Dnum = 1;
     end
+    if isempty(savingNum)
+        savingNum = 10;           %the frame number that will be saved
+    end
 
     if Dnum <= SavingNum
         if ~isempty(pn) % fn will be zero if user hits cancel
-            savefast([pn,'\Data',int2str(Dnum),'.mat'],'IBuffer','QBuffer','para','ROIinfo');
+            savefast([pn,'\Data',int2str(Dnum),'.mat'],'IData','QData','IQB','para','ROIinfo');
             fprintf('The %dth data has been saved!\n ',Dnum);
             Dnum = Dnum+1;
             assignin('base','Dnum',Dnum);
@@ -602,12 +655,61 @@ end
 
 
 
+% Draw ROI of doppler in the image
+function drawROI()
+
+persistent recHandle1 markHandle
+
+DPIROI = evalin('base','DPIROI');
+figClose  = evalin('base','figClose');
+bmodeHandle = evalin('base','Resource.DisplayWindow(1).figureHandle');
+DPIFocusX = evalin('base','DPIFocusX');
+DPIFocusZ = evalin('base','DPIFocusZ');
+
+switch figClose    
+    case 1  % not freeze status, but fig has been closed
+        assignin('base','figClose',2);
+        delete(gcf)
+        return
+    case 2  % fig was closed at freeze status
+        return
+    case 0         
+        adjStatus = evalin('base','adjStatus');            
+        if adjStatus == 1
+            x = DPIFocusX;
+            z = DPIFocusZ;           
+            % Mark on bmode figure
+            if ishandle(bmodeHandle)
+                if  isempty(recHandle1) || ~ishandle(recHandle1)
+                    figure(bmodeHandle), hold on,
+                    recHandle1 = rectangle('Position',[x-DPIROI(1)/2,z-DPIROI(2)/2,DPIROI(1),DPIROI(2)],'EdgeColor','r');
+                    markHandle = plot(x,z,'xr','MarkerFaceColor','r','MarkerSize',8,'Linewidth',2);hold off;
+                else
+                    set(recHandle1,'Position',[x-DPIROI(1)/2,z-DPIROI(2)/2,DPIROI(1),DPIROI(2)],'EdgeColor','r');
+                    set(markHandle,'XData',x);
+                    set(markHandle,'YData',z);
+                end
+            end                       
+        end            
+end
+
+end
+
+
+
+% - debug external function
+function debugFunc()
+    
+
+end
+
+
 %% Callback functions
 
 % - measure, switch from B-mode to Doppler
 function measure(~,~)
 
-    nStart = evalin('base','nStartDoppler');
+    nStart = evalin('base','nStartMeasure');
     Control = evalin('base','Control');
     Control.Command = 'set&Run';
     Control.Parameters = {'Parameters',1,'startEvent',nStart};
@@ -616,4 +718,121 @@ function measure(~,~)
 
 end
 
+%+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+% - Close handle
+function closeIQfig(varargin)
+
+exitValue = evalin('base','vsExit');
+freeze = evalin('base','freeze');
+% if GUI is not freeze, just assign value 1 for EF to close the fig
+assignin('base','figClose',1);
+if exitValue  % if GUI has been closed, delete fig
+    delete(gcf)
+end
+if freeze  % if GUI is freeze, delete and assign 2 to figClose
+    assignin('base','figClose',2);
+    delete(gcf);
+end
+
+end
+
+%+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+% - change ROI width
+function widthChange(src,evt,UIValue)
+UI = evalin('base','UI');
+PData = evalin('base','PData');
+DPIROI = evalin('base','DPIROI');
+DPIFocusX = evalin('base','DPIFocusX');
+DPIFocusZ = evalin('base','DPIFocusZ');
+if mod(UIValue,2)==1
+    DPIROI(1) = UIValue+1;
+    %set(UI(11).CurrentValue,UIValue+1);   %?????
+else
+    DPIROI(1) = UIValue;
+end
+assignin('base','DPIROI',DPIROI);
+
+% change PData(1) size
+PData(1).Region(2).Shape = struct(...
+    'Name','Rectangle',...
+    'Position',[DPIFocusX,0,DPIFocusZ-DPIROI(2)/2],...
+    'width', DPIROI(1),...
+    'height', DPIROI(2));
+PData(1).Region = computeRegions(PData(1));
+assignin('base','PData',PData);
+Control = evalin('base','Control');
+Control.Command = 'update&Run';
+Control.Parameters = {'PData'};
+assignin('base','Control', Control);
+assignin('base','adjStatus',1);
+
+
+
+
+end
+
+
+% - ROI height change
+function heightChange(src,evt,UIValue)
+PData = evalin('base','PData');
+DPIROI = evalin('base','DPIROI');
+dpiHandle = evalin('base','dpiHandle');
+DPIFocusX = evalin('base','DPIFocusX');
+DPIFocusZ = evalin('base','DPIFocusZ');
+DPIROI(2) = UIValue;
+assignin('base','DPIROI',DPIROI);
+
+% change PData(1) size
+PData(1).Region(2).Shape = struct(...
+    'Name','Rectangle',...
+    'Position',[DPIFocusX,0,DPIFocusZ-DPIROI(2)/2],...
+    'width', DPIROI(1),...
+    'height', DPIROI(2));
+PData(1).Region = computeRegions(PData(1));
+assignin('base','PData',PData);
+Control = evalin('base','Control');
+Control.Command = 'update&Run';
+Control.Parameters = {'PData'};
+assignin('base','Control', Control);
+assignin('base','adjStatus',1);
+pos = get(dpiHandle,'Position');
+set(dpiHandle,'Position',[pos(1:2),[DPIROI(1)+3,DPIROI(2)]*7]);
+
+end
+
+
+
+% -  Unkown function
+function focusAdj(varargin)
+
+freeze = evalin('base','freeze');
+checkFocusAdj = evalin('base','checkFocusAdj');
+bmodeHandle = evalin('base','Resource.DisplayWindow(1).figureHandle');
+bmodeAxes = get(bmodeHandle,'currentAxes');
+DPIROI = evalin('base','DPIROI');
+
+if checkFocusAdj == 2 && freeze == 0    
+ 
+    pos = get(bmodeAxes,'CurrentPoint');
+    DPIFocusX = round(pos(1));
+    DPIFocusZ = round(pos(3));
+    assignin('base','adjStatus',1);    
+    PData = evalin('base','PData');
+    PData(1).Region(2).Shape = struct(...
+        'Name','Rectangle',...
+        'Position',[DPIFocusX,0,DPIFocusZ-DPIROI(2)/2],...
+        'width', DPIROI(1),...
+        'height', DPIROI(2));
+    PData(1).Region = computeRegions(PData(1));
+    assignin('base','PData',PData);
+    assignin('base','DPIFocusX', DPIFocusX);
+    assignin('base','DPIFocusZ', DPIFocusZ);
+    Control.Command = 'update&Run';
+    Control.Parameters = {'PData','Recon'};
+    assignin('base','Control', Control);    
+end
+
+end
