@@ -16,10 +16,10 @@
 clear;
 
 filename = ('fyk_L11_4vAcquireDopplerIQ_AnglesSC');
-pn = uigetdir;
-SavingNum = 10;
+pn = 'E:\FYK\20230227';
 
-EXPtimes = 200;
+
+
 ScaleMax = 500;  % scaling of the display function
 ScaleMin = 0;  % scaling of the display function
 ScaleRange = 0;  % scaling of the display function
@@ -43,7 +43,7 @@ WBFactor = 1.8;  %  control the element size for wide beam detect
 Resource.Parameters.numTransmit = 128;      % number of transmit channels.
 Resource.Parameters.numRcvChannels = 128;    % number of receive channels.
 Resource.Parameters.speedOfSound = 1540;    % set speed of sound in m/sec before calling computeTrans
-Resource.Parameters.simulateMode = 0;
+Resource.Parameters.simulateMode = 1;
 
 
 % Specify Trans structure array.
@@ -500,7 +500,7 @@ for N = 1:Resource.RcvBuffer(2).numFrames
     Event(n).tx = 0;         % no transmit
     Event(n).rcv = 0;        % no rcv
     Event(n).recon = 0;      % no recon
-    Event(n).process = 4;    % save
+    Event(n).process = 2;    % save
     Event(n).seqControl = 0;
     n = n+1;
 
@@ -536,15 +536,14 @@ UIPos(:,2,3) = 0.0:0.1:0.9;
 
 
 
-import vsv.seq.uicontrol.VsPushButton;
+import vsv.seq.uicontrol.VsButtonControl;
 Pos = UIPos(2,:,3);
-UI(1).Control = VsPushButton('String','Measure',...
-    'Units','normalized',...
-    'Position',[Pos+[-0.13 0.05],0.12,0.04],...
-    'FontUnits','normalized',...
-    'FontSize',0.5,...
+UI(1).Control = VsButtonControl('Label','Measure',...
+    'LocationCode','UserB3',...
     'Callback',@measure);
-
+%     'Units','normalized',...
+%     'FontUnits','normalized',...
+%     'FontSize',0.5,...
 
 
 %% User specified External function
@@ -559,7 +558,7 @@ UI(1).Control = VsPushButton('String','Measure',...
 % @ sign. You can now mark this function handle, and right click and then
 % select 'Open runTimeMon' and the editor will jump to the function
 % definition in your script
-EF(1).Function = vsv.seq.function.ExFunctionDef('savingIQData', @savingIQData);
+EF(1).Function = vsv.seq.function.ExFunctionDef('SavingIQData', @SavingIQData);
 
 
 
@@ -605,72 +604,16 @@ end
 
 %% Callback functions
 
-% - measure, switch between B-mode and Doppler
-function measure(~,~,UIValue)
+% - measure, switch from B-mode to Doppler
+function measure(~,~)
 
-    UI = evalin('base','UI');
-    figClose = evalin('base','figClose');
-    
-    % if freeze == 0 && figClose == 0
-    if figClose == 0 
-        disp(UIValue);
-        if strcmp(UIValue,1)
-            nStart = evalin('base','nStartDoppler');
-            Control = evalin('base','Control');
-            Control.Command = 'set&Run';
-            Control.Parameters = {'Parameters',1,'startEvent',nStart};
-            evalin('base',['Resource.Parameters.startEvent =',num2str(nStart),';']);
-            assignin('base','Control',Control);
-            set(UI(14).handle,'String','Monitor')
-        else
-            nStart = 1;
-            Control = evalin('base','Control');
-            Control.Command = 'set&Run';
-            Control.Parameters = {'Parameters',1,'startEvent',nStart};
-            evalin('base',['Resource.Parameters.startEvent =',num2str(nStart),';']);
-            assignin('base','Control',Control);
-            set(UI(14).handle,'String','Measure')
-            
-        end
-    
-    end
-end
-
-
-% - Scale Change
-function scaleChange(~,~,UIValue)
-ScaleMax = evalin('base','ScaleMax');
-ScaleMin = evalin('base','ScaleMin');
-ScaleRange = evalin('base','ScaleRange');
-ScaleOffset = evalin('base','ScaleOffset');
-
-ScaleRange = UIValue;
-ScaleMax = sign(ScaleOffset)*2^abs(ScaleOffset) + 2^ScaleRange;
-ScaleMin = sign(ScaleOffset)*2^abs(ScaleOffset) - 2^ScaleRange;
-disp([' ScaleMin = ',num2str(ScaleMin),'ScaleMax = ',num2str(ScaleMax)]);
-
-assignin('base','ScaleMax',ScaleMax);
-assignin('base','ScaleMin',ScaleMin);
-assignin('base','ScaleRange',ScaleRange);
-assignin('base','ScaleOffset',ScaleOffset);
+    nStart = evalin('base','nStartDoppler');
+    Control = evalin('base','Control');
+    Control.Command = 'set&Run';
+    Control.Parameters = {'Parameters',1,'startEvent',nStart};
+    evalin('base',['Resource.Parameters.startEvent =',num2str(nStart),';']);
+    assignin('base','Control',Control);
 
 end
 
 
-% - Scale Offset Change
-function scaleOffsetChange(~,~,UIValue)
-ScaleMax = evalin('base','ScaleMax');
-ScaleRange = evalin('base','ScaleRange');
-ScaleOffset = evalin('base','ScaleOffset');
-
-ScaleOffset = UIValue;
-ScaleMax = sign(ScaleOffset)*2^abs(ScaleOffset) + 2^ScaleRange;
-ScaleMin = sign(ScaleOffset)*2^abs(ScaleOffset) - 2^ScaleRange;
-disp([' ScaleMin = ',num2str(ScaleMin),'ScaleMax = ',num2str(ScaleMax)]);
-
-assignin('base','ScaleMax',ScaleMax);
-assignin('base','ScaleMin',ScaleMin);
-assignin('base','ScaleRange',ScaleRange);
-assignin('base','ScaleOffset',ScaleOffset);
-
-end
