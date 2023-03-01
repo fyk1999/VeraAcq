@@ -174,13 +174,15 @@ Resource.InterBuffer(2).pagesPerFrame = ne;
 Resource.DisplayWindow(1).Title = filename;
 Resource.DisplayWindow(1).pdelta = 0.35;
 ScrnSize = get(0,'ScreenSize');
-
 DwWidth = ceil(PData(1).Region(1).Shape.width*PData(1).PDelta(1)/Resource.DisplayWindow(1).pdelta);
 DwHeight = ceil(PData(1).Region(1).Shape.height*2*PData(1).PDelta(3)/Resource.DisplayWindow(1).pdelta);
 Resource.DisplayWindow(1).Position = [250,(ScrnSize(4)-(DwHeight+150))/2, ...  % lower left corner position
     DwWidth, DwHeight];
 Resource.DisplayWindow(1).ReferencePt = [PData(1).Origin(1),PData(1).Origin(3)]; % 2D imaging is in the X,Z plane
 Resource.DisplayWindow(1).Colormap = gray(256);
+Resource.DisplayWindow(1).Type = 'Matlab';
+Resource.VDAS.dmaTimeout = 2000;
+
 
 %% Transmit parameters
 % Specify Transmit waveform structure.
@@ -537,8 +539,8 @@ UIPos(:,2,1) = 0.0:0.1:0.9;
 UIPos(:,2,2) = 0.0:0.1:0.9;
 UIPos(:,2,3) = 0.0:0.1:0.9;
 
+import vsv.seq.uicontrol.*;
 
-import vsv.seq.uicontrol.VsButtonControl;
 Pos = UIPos(2,:,3);
 UI(1).Control = VsButtonControl('Label','Measure',...
     'LocationCode','UserB3',...
@@ -549,18 +551,16 @@ UI(1).Control = VsButtonControl('Label','Measure',...
 
 
 % - Focus Adjustment, off: checkFocusAdj = 1, on: checkFocusAdj = 2
-import vsv.seq.uicontrol.VsButtonGroupControl;
 checkFocusAdj = 1;
 UI(2).Control = VsButtonGroupControl('LocationCode','UserB5',...
-    'Label','Focus Adjustment',...
-    'NumButtons',2,...
+    'Title','Focus Adjustment',...
+    'PossibleCases',{'on','off'},...
     'Callback',@focusAdj);
 %'Labels',{'off','on'}
 
 
 
 % ROI adjustment
-import vsv.seq.uicontrol.VsSliderControl;
 UI(3).Control = VsSliderControl('LocationCode','UserB3', ...
     'Label','ROI Width',...
     'SliderMinMaxVal',[20,120,DPIROI(1)],...
@@ -574,7 +574,11 @@ UI(4).Control = VsSliderControl('LocationCode','UserB2', ...
     'SliderStep',[2/100,10/100],'ValueFormat','%3.0f',...
     'Callback',@heightChange);
 
-
+UI(5).Control = vsv.seq.uicontrol.VsButtonGroupControl('LocationCode','UserB5',...
+    'Title','Adjust Focus',...
+    'NumButtons',2,...
+    'PossibleCases',   {'off','on'},...
+    'Callback', @AdjustFocusCallback);
 
 
 
@@ -604,7 +608,7 @@ dpiHandle = figure('Name','DopplerModeVisulization',...
     [DPIROI(1)+3,DPIROI(2)]*7], ...            % width, height
     'CloseRequestFcn',{@closeIQfig});
 
-
+bmodeHandle = [];
 
 % figClose is used for figclose function in shearwave visualization
 figClose = 0;
@@ -616,7 +620,7 @@ adjStatus = 1;
 
 % Save all the structures to a .mat file.
 save(['MatFiles\',filename]);
-%VSX
+VSX
 return
 
 
@@ -658,7 +662,7 @@ end
 % Draw ROI of doppler in the image
 function drawROI()
 
-persistent recHandle1 markHandle
+global recHandle1 markHandle
 
 DPIROI = evalin('base','DPIROI');
 figClose  = evalin('base','figClose');
@@ -692,6 +696,7 @@ switch figClose
             end                       
         end            
 end
+assignin('base','BmodeHandle',bmodeHandle);
 
 end
 
@@ -739,7 +744,6 @@ end
 
 %+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-
 % - change ROI width
 function widthChange(src,evt,UIValue)
 UI = evalin('base','UI');
@@ -769,11 +773,9 @@ Control.Parameters = {'PData'};
 assignin('base','Control', Control);
 assignin('base','adjStatus',1);
 
-
-
-
 end
 
+%+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 % - ROI height change
 function heightChange(src,evt,UIValue)
@@ -803,7 +805,7 @@ set(dpiHandle,'Position',[pos(1:2),[DPIROI(1)+3,DPIROI(2)]*7]);
 
 end
 
-
+%+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 % -  Unkown function
 function focusAdj(varargin)
@@ -834,5 +836,26 @@ if checkFocusAdj == 2 && freeze == 0
     Control.Parameters = {'PData','Recon'};
     assignin('base','Control', Control);    
 end
+
+end
+
+%+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+% - 
+function AdjustFocusCallback(~,~,UIValue)
+
+Resource = evalin('base','Resource');
+% checkFocusAdj =  evalin('base','checkFocusAdj');
+checkFocusAdj = UIValue;
+fh = Resource.DisplayWindow(1).figureHandle;
+% 'set(Resource.DisplayWindow(1).figureHandle,''WindowButtonDownFcn'',{@focusAdj,''focusAdj''});';
+
+if UIValue == 2  
+    set(fh,'WindowButtonDownFcn',{@focusAdj,'focusAdj'});
+else
+    set(fh,'WindowButtonDownFcn',[]);
+end
+
+assignin('base','checkFocusAdj',checkFocusAdj);
 
 end
