@@ -31,8 +31,10 @@ DopplerFrames = 100;
 maxVoltage = 61;
 Fc = 6.25e6;
 na  = 3;%number of views (angles) for compound imaging, can be even or odd
-PRTus = 200; % in us
-PRF = 1/(na*PRTus*1e-6);
+numAccum = 2;
+PRFdoppler = 1e3;
+PRF = PRFdoppler*na*numAccum;
+PRT = 1/PRF;
 dtheta = (12*pi/180)/(na);        %increment of angle:-2,0,2
 startAngle = -(na-1)/2*dtheta;
 
@@ -120,9 +122,9 @@ para.pitch = para.c/para.fc;
 para.startDepth = Format.startDepth;
 para.endDepth = Format.startDepth + wlsPer128*ceil(maxAcqLength/wlsPer128);
 para.intervalSample = ceil(para.endDepth-para.startDepth)*4*2;
-para.DetectTprf = PRTus*1e-6;
-para.Tprf = PRTus*1e-6;   %?????????????xxxxxxxxx???????????????!!!!!!!!
-para.prf = 1/para.Tprf;
+para.DetectTprf = 0;
+para.Tprf = 0;   %?????????????xxxxxxxxx???????????????!!!!!!!!
+para.prf = PRF;
 
 
 % ROI Info
@@ -244,7 +246,7 @@ Receive = repmat(struct('Apod', zeros(1,Trans.numelements), ...
     'acqNum', 1, ...
     'sampleMode', 'NS200BW', ...
     'mode', 0, ...
-    'callMediaFunc', 0), 1, na*BmodeFrames+ne*na*Resource.RcvBuffer(2).numFrames);
+    'callMediaFunc', 0), 1, na*BmodeFrames+ne*na*Resource.RcvBuffer(2).numFrames*2);
 
 % - Set event specific Receive attributes for B-mode
 for ii = 1:Resource.RcvBuffer(1).numFrames
@@ -263,14 +265,23 @@ ind = na*BmodeFrames;
 for N = 1:Resource.RcvBuffer(2).numFrames
     for j = 1:ne
         for k = 1:na
+            % first acquistion
             Receive(ind+(j-1)*na+k).callMediaFunc = 1;
             Receive(ind+(j-1)*na+k).Apod(1:128) = 1.0;
             Receive(ind+(j-1)*na+k).framenum = N;
             Receive(ind+(j-1)*na+k).bufnum = 2;
             Receive(ind+(j-1)*na+k).acqNum = (j-1)*na+k;
+            Receive(ind+(j-1)*na+k).mode = 0;
+            % accumulate acquistion
+            Receive(ind+(j-1)*na+k+1).callMediaFunc = 0;
+            Receive(ind+(j-1)*na+k+1).Apod(1:128) = 1.0;
+            Receive(ind+(j-1)*na+k+1).framenum = N;
+            Receive(ind+(j-1)*na+k+1).bufnum = 2;
+            Receive(ind+(j-1)*na+k+1).acqNum = (j-1)*na+k;
+            Receive(ind+(j-1)*na+k+1).mode = 1;
         end
     end
-    ind = ind + na*ne;
+    ind = ind + na*ne*2;
 end
 
 
@@ -371,7 +382,7 @@ SeqControl(1).argument = 500000; % wait 100 msec.
 
 % - time between detect acquisitions
 SeqControl(2).command = 'timeToNextAcq';
-SeqControl(2).argument = PRTus;               % 100 usec (10KHz),500 usec (2 KHz)
+SeqControl(2).argument = round(PRT*1e6);               % 100 usec (10KHz),500 usec (2 KHz)
 TTNAQ = 2;
 
 % - Return to Matlab
@@ -402,7 +413,11 @@ SeqControl(8).command = 'triggerOut';
 SeqControl(8).condition = 'syncADC_CLK'; % input BNC #1 falling edge
 TGOUT = 8;
 
-nsc = 9;
+SeqControl(9).command = 'loopCnt';
+SeqControl(9).argument = P.numAccum;
+SLCN = 9;
+
+nsc = 10;
 
 % Specify Event structure arrays.
 n = 1;
@@ -479,13 +494,53 @@ ind = na*BmodeFrames;
 for N = 1:Resource.RcvBuffer(2).numFrames
     for j = 1:ne
         for ii=1:na
-            Event(n).info = 'Acquire data';
+            Event(n).info = '1st acquisition';
             Event(n).tx = ii; %  PWNum*PWFocusXNum+numRays+1;
-            Event(n).rcv = ind+na*(j-1)+ii; %numRays*BmodeFrames+j;%%%
+            Event(n).rcv = ind+na*(j-1)*2+ii; %numRays*BmodeFrames+j;%%%
             Event(n).recon = 0;      % no reconstruction.
             Event(n).process = 0;    % no processing
             Event(n).seqControl = [TTNAQ]; %100us per detect
             n = n+1;
+
+            Event(n).info = 'Set loop count for number of accumulates.';
+            Event(n).tx = 0;
+            Event(n).rcv = 0;
+            Event(n).recon = 0;
+            Event(n).process = 0;
+            Event(n).seqControl = SLCN;
+            n = n+1;
+
+            Event(n).info = 'Jump to end of accumulate events for loop count test.';
+            Event(n).tx = 0;
+            Event(n).rcv = 0;
+            Event(n).recon = 0;
+            Event(n).process = 0;
+            Event(n).seqControl = nsc;
+            SeqControl(nsc).command = 'jump';  % Argument set below.
+            nsc = nsc + 1;
+            n = n+1;
+
+            nstart = n;
+            Event(n).info = 'Accumulate acquisition';
+            Event(n).tx = ii;
+            Event(n).rcv = ind+na*(j-1)*2+ii+1;
+            Event(n).recon = 0;
+            Event(n).process = 0;
+            Event(n).seqControl = 2;
+            n = n+1;
+
+            SeqControl(nsc-1).argument = n;
+            Event(n).info = 'Test loop count - if nz, jmp back to start of accumulates.';
+            Event(n).tx = 0;
+            Event(n).rcv = 0;
+            Event(n).recon = 0;
+            Event(n).process = 0;
+            Event(n).seqControl = nsc;
+            SeqControl(nsc).command = 'loopTst';
+            SeqControl(nsc).argument = nstart;
+            nsc = nsc + 1;
+            n = n+1;
+
         end
     end
     Event(n-1).seqControl = [TTNF,nsc,RTML];
@@ -509,7 +564,7 @@ for N = 1:Resource.RcvBuffer(2).numFrames
     Event(n).seqControl = 0;
     n = n+1;
 
-    ind = ind + na*ne;
+    ind = ind + na*ne*2;
 end
 
 
