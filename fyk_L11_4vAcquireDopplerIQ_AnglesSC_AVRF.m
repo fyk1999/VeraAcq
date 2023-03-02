@@ -16,14 +16,14 @@
 clear;
 
 filename = ('fyk_L11_4vAcquireDopplerIQ_AnglesSC');
-pn = 'E:\FYK\20230227';
+pn =   'D:\fyk&chx\20230301';
 
 
 ScaleMax = 500;  % scaling of the display function
 ScaleMin = 0;  % scaling of the display function
 ScaleRange = 0;  % scaling of the display function
 ScaleOffset = 0;  % scaling of the display function
-ne = 50;         % Set ne = number of detect acquisitions.
+ne = 200;         % Set ne = number of detect acquisitions.
 % DPIFrames   = 1;
 BmodeFrames = 10;
 DopplerFrames = 100;
@@ -60,8 +60,8 @@ Trans.maxHighVoltage = maxVoltage;  % set maximum high voltage limit for pulser 
 % Specify Format structure array.
 Format.transducer = 'L11-4v';   % 128 element linear array
 Format.scanFormat = 'RLIN';     % rectangular linear array scan
-Format.startDepth = 100;   % Acquisition depth in wavelengths150
-Format.endDepth = 256;   % This should preferrably be a multiple of 128 samples.300
+Format.startDepth = 10;   % Acquisition depth in wavelengths150
+Format.endDepth = 128;   % This should preferrably be a multiple of 128 samples.300
 
 DPIFocusX = 0;
 DPIFocusZ = Format.endDepth-(Format.endDepth-Format.startDepth)/2;%65;
@@ -410,11 +410,11 @@ SeqControl(7).argument = 1;
 TCPBB = 7;
 
 
-SeqControl(9).command = 'loopCnt';
-SeqControl(9).argument = numAccum;
-SLCN = 9;
+SeqControl(8).command = 'loopCnt';
+SeqControl(8).argument = numAccum;
+SLCN = 8;
 
-nsc = 10;
+nsc = 9;
 
 % Specify Event structure arrays.
 n = 1;
@@ -619,7 +619,7 @@ import vsv.seq.uicontrol.*;
 
 Pos = UIPos(2,:,3);
 UI(1).Control = VsButtonControl('Label','Measure',...
-    'LocationCode','UserB3',...
+    'LocationCode','UserB2',...
     'Callback',@measure);
 %     'Units','normalized',...
 %     'FontUnits','normalized',...
@@ -628,29 +628,29 @@ UI(1).Control = VsButtonControl('Label','Measure',...
 
 % - Focus Adjustment, off: checkFocusAdj = 1, on: checkFocusAdj = 2
 checkFocusAdj = 1;
-UI(2).Control = VsButtonGroupControl('LocationCode','UserB5',...
-    'Title','Focus Adjustment',...
-    'PossibleCases',{'on','off'},...
-    'Callback',@focusAdj);
+%UI(2).Control = VsButtonGroupControl('LocationCode','UserB6',...
+%    'Title','Focus Adjustment',...
+%    'PossibleCases',{'on','off'},...
+%    'Callback',@focusAdj);
 %'Labels',{'off','on'}
 
 
 
 % ROI adjustment
-UI(3).Control = VsSliderControl('LocationCode','UserB3', ...
+UI(3).Control = VsSliderControl('LocationCode','UserB5', ...
     'Label','ROI Width',...
     'SliderMinMaxVal',[20,120,DPIROI(1)],...
     'SliderStep',[2/80,10/80],'ValueFormat','%3.0f',...
     'Callback',@widthChange);
 
 
-UI(4).Control = VsSliderControl('LocationCode','UserB2', ...
+UI(4).Control = VsSliderControl('LocationCode','UserB4', ...
     'Style','VsSlider','Label','ROI Hight',...
     'SliderMinMaxVal',[20,(Format.endDepth-Format.startDepth),DPIROI(2)],...
     'SliderStep',[2/100,10/100],'ValueFormat','%3.0f',...
     'Callback',@heightChange);
 
-UI(5).Control = vsv.seq.uicontrol.VsButtonGroupControl('LocationCode','UserB5',...
+UI(5).Control = vsv.seq.uicontrol.VsButtonGroupControl('LocationCode','UserB3',...
     'Title','Adjust Focus',...
     'NumButtons',2,...
     'PossibleCases',   {'off','on'},...
@@ -709,20 +709,19 @@ function saveIQData(IData,QData)
     para = evalin('base','para');
     ROIinfo = evalin('base','ROIinfo');
     pn = evalin('base','pn');
-    IQB = evalin('base','IQData(1)');   % TRY ??? !!!
 
-    persistent savingNum;
+    persistent SavingNum;
     persistent Dnum ;
     if isempty(Dnum)
         Dnum = 1;
     end
-    if isempty(savingNum)
-        savingNum = 10;           %the frame number that will be saved
+    if isempty(SavingNum)
+        SavingNum = 10;           %the frame number that will be saved
     end
 
     if Dnum <= SavingNum
         if ~isempty(pn) % fn will be zero if user hits cancel
-            savefast([pn,'\Data',int2str(Dnum),'.mat'],'IData','QData','IQB','para','ROIinfo');
+            savefast([pn,'\Data',int2str(Dnum),'.mat'],'IData','QData','para','ROIinfo');
             fprintf('The %dth data has been saved!\n ',Dnum);
             Dnum = Dnum+1;
             assignin('base','Dnum',Dnum);
@@ -891,6 +890,7 @@ checkFocusAdj = evalin('base','checkFocusAdj');
 bmodeHandle = evalin('base','Resource.DisplayWindow(1).figureHandle');
 bmodeAxes = get(bmodeHandle,'currentAxes');
 DPIROI = evalin('base','DPIROI');
+Fc = evalin('base','Fc');
 
 if checkFocusAdj == 2 && freeze == 0    
  
@@ -911,6 +911,8 @@ if checkFocusAdj == 2 && freeze == 0
     Control.Command = 'update&Run';
     Control.Parameters = {'PData','Recon'};
     assignin('base','Control', Control);    
+    
+    fprintf("Focus Z = %0.2f(cm)\n",100*DPIFocusZ*1540/Fc);
 end
 
 end
