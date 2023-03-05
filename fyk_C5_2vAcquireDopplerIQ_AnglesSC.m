@@ -1,29 +1,17 @@
 
-% Detect motion in ROI and aquire RF data
-% Plane wave B mode for monitoring and detecting
-% Moving Roi, DPIRoiOffset can be changed in GUI
-% Two TPCs are used in this script
-% Wait for triggering in before Doppler detecting
-% Acquiring/processing/Saving automatically
-% Changing the "EXPtimes" to set running turns
-
-
-% Last update: Hu FOX, 22/06/2019,shenzhen for vantage 4.0
-
-
 
 %% System parameters
 clear;
 
 filename = ('fyk_C5_2vAcquireDopplerIQ_AnglesSC');
-pn = pwd;
+pn = 'E:\FYK\Delete';
 
 
 ScaleMax = 500;  % scaling of the display function
 ScaleMin = 0;  % scaling of the display function
 ScaleRange = 0;  % scaling of the display function
 ScaleOffset = 0;  % scaling of the display function
-ne = 200;         % Set ne = number of detect acquisitions.
+ne = 50;         % Set ne = number of detect acquisitions.
 % DPIFrames   = 1;
 BmodeFrames = 10;
 DopplerFrames = 100;
@@ -62,14 +50,14 @@ theta = -(scanangle/2); % angle to left edge from centerline
 % Specify Format structure array.
 Format.transducer = 'L11-4v';   % 128 element linear array
 Format.scanFormat = 'RLIN';     % rectangular linear array scan
-Format.startDepth = 10;   % Acquisition depth in wavelengths150
-Format.endDepth = 128;   % This should preferrably be a multiple of 128 samples.300
+Format.startDepth = 20;   % Acquisition depth in wavelengths150
+Format.endDepth = 256;   % This should preferrably be a multiple of 128 samples.300
 P.startDepth = Format.startDepth;
 P.endDepth = Format.endDepth;
 
 
 
-DPIROI.focus = radius + Format.startDepth + (Format.endDepth-Format.startDepth)/2;  % midpoint at default;
+DPIROI.focus = Format.startDepth + (Format.endDepth-Format.startDepth)/2;  % center point at default;
 DPIROI.angles = scanangle/2;
 DPIROI.height  = (Format.endDepth-Format.startDepth)/2;   
 
@@ -91,8 +79,8 @@ PData(1).Region.Shape = struct(...
 PData(1).Region(2).Shape = struct(...
                    'Name','Sector',...
                    'Position',[0,0,-radius],...
-                   'r1',DPIROI.focus - DPIROI.height,...
-                   'r2',DPIROI.focus + DPIROI.height,...
+                   'r1',radius+DPIROI.focus - DPIROI.height/2,...
+                   'r2',radius+DPIROI.focus + DPIROI.height/2,...
                    'angle',DPIROI.angles);
 PData(1).Region = computeRegions(PData(1));
 
@@ -200,7 +188,7 @@ Resource.DisplayWindow(1).Position = [250,(ScrnSize(4)-(DwHeight+150))/2, ...  %
 Resource.DisplayWindow(1).ReferencePt = [PData(1).Origin(1),0,PData(1).Origin(3)];   % 2D imaging is in the X,Z plane
 Resource.DisplayWindow(1).Type = 'Matlab';
 %Resource.DisplayWindow(1).numFrames = 20;
-Resource.DisplayWindow(1).AxesUnits = 'mm';
+%Resource.DisplayWindow(1).AxesUnits = 'mm';
 Resource.DisplayWindow.Colormap = gray(256);
 Resource.VDAS.dmaTimeout = 2000;
 
@@ -414,6 +402,12 @@ Process(3).method = 'drawROI';
 Process(3).Parameters = {'srcbuffer','none'};
 
 
+Process(4).classname = 'External';
+Process(4).method = 'debugFunc';
+Process(4).Parameters = {'srcbuffer','none'};
+
+
+
 %% SeqControl and Events
 % - Noop to allow time for charging external cap.
 SeqControl(1).command = 'noop';
@@ -454,16 +448,11 @@ SeqControl(8).argument = numAccum;
 SLCN = 8;
 
 
-SeqControl(9).command = 'cBranch';
-SeqControl(9).condition = 'bFlag';
-BRAN = 9;
+SeqControl(9).command = 'sync';
+SYNC = 9;
 
 
-SeqControl(10).command = 'sync';
-SYNC = 10;
-
-
-nsc = 11;
+nsc = 10;
 
 % Specify Event structure arrays.
 n = 1;
@@ -511,14 +500,6 @@ for ii = 1:Resource.RcvBuffer(1).numFrames   %Resource.RcvBuffer(1).numFrames = 
     Event(n).seqControl = RTML;
     n = n+1;
 
-
-    Event(n).info = 'cBranch conditionaljump';
-    Event(n).tx = 0;
-    Event(n).rcv = 0;
-    Event(n).recon = 0;
-    Event(n).process = 0;
-    Event(n).seqControl = BRAN;
-    n = n+1;
     
 end
 
@@ -537,9 +518,7 @@ n = n+1;
 
 %%%%%% Another Loop %%%%%%
 
-
 nStartMeasure = n; 
-SeqControl(BRAN).argument = nStartMeasure;  % branch Event for the cBranch command
 %
 Event(n).info = 'TPC Doppler';
 Event(n).tx = 0;
@@ -616,7 +595,7 @@ Event(n).recon = 0;     % no Recon
 Event(n).process = 0;
 Event(n).seqControl = nsc; % jump command
 SeqControl(nsc).command = 'jump';
-SeqControl(nsc).argument = nStartMeasure+2;
+SeqControl(nsc).argument = nStartMeasure+1;
 nsc = nsc + 1;
 n = n+1;
 
@@ -638,21 +617,21 @@ UIPos(:,2,3) = 0.0:0.1:0.9;
 import vsv.seq.uicontrol.*;
 
 % - cBranch Gui Button
-UI(1).Control = VsToggleButtonControl('LocationCode','UserB2',...
-    'Label','Measure','Callback',@CBranchButtonCallback);
+UI(1).Control = VsButtonControl('LocationCode','UserB2',...
+    'Label','Measure','Callback',@measure);
 
 
 % ROI adjustment
 UI(2).Control = VsSliderControl('LocationCode','UserB5', ...
-    'Label','ROI Width',...
-    'SliderMinMaxVal',[20,120,DPIROI(1)],...
+    'Label','ROI angle',...
+    'SliderMinMaxVal',[0.4,0.8,DPIROI.angles],...
     'SliderStep',[2/80,10/80],'ValueFormat','%3.0f',...
     'Callback',@angleChange);
 
 
 UI(3).Control = VsSliderControl('LocationCode','UserB4', ...
     'Style','VsSlider','Label','ROI Hight',...
-    'SliderMinMaxVal',[20,(Format.endDepth-Format.startDepth),DPIROI(2)],...
+    'SliderMinMaxVal',[20,(Format.endDepth-Format.startDepth),DPIROI.height],...
     'SliderStep',[2/100,10/100],'ValueFormat','%3.0f',...
     'Callback',@heightChange);
 
@@ -681,17 +660,17 @@ UI(4).Control = vsv.seq.uicontrol.VsButtonGroupControl('LocationCode','UserB3',.
 % definition in your script
 EF(1).Function = vsv.seq.function.ExFunctionDef('saveIQData', @saveIQData);
 EF(2).Function = vsv.seq.function.ExFunctionDef('drawROI', @drawROI);
-
+EF(3).Function = vsv.seq.function.ExFunctionDef('debugFunc', @debugFunc);
 
 %% other thing
 
 % Handle for Doppler figure
-dpiHandle = figure('Name','DopplerModeVisulization',...
-    'NumberTitle','off','Visible','off',...
-    'Position',[Resource.DisplayWindow(1).Position(1)+250, ... % left edge
-    Resource.DisplayWindow(1).Position(2), ... % bottom
-    [DPIROI(1)+3,DPIROI(2)]*7], ...            % width, height
-    'CloseRequestFcn',{@closeIQfig});
+%dpiHandle = figure('Name','DopplerModeVisulization',...
+%     'NumberTitle','off','Visible','off',...
+%     'Position',[Resource.DisplayWindow(1).Position(1)+250, ... % left edge
+%     Resource.DisplayWindow(1).Position(2), ... % bottom
+%     [DPIROI(1)+3,DPIROI(2)]*7], ...            % width, height
+%     'CloseRequestFcn',{@closeIQfig});
 
 bmodeHandle = [];
 
@@ -705,7 +684,7 @@ adjStatus = 1;
 
 % Save all the structures to a .mat file.
 save(['MatFiles\',filename]);
-%VSX
+VSX
 return
 
 
@@ -716,7 +695,7 @@ return
 function saveIQData(IData,QData)
 %
     para = evalin('base','para');
-    ROIinfo = evalin('base','ROIinfo');
+    DPIROI = evalin('base','DPIROI');
     pn = evalin('base','pn');
 
     persistent SavingNum;
@@ -725,12 +704,12 @@ function saveIQData(IData,QData)
         Dnum = 1;
     end
     if isempty(SavingNum)
-        SavingNum = 10;           %the frame number that will be saved
+        SavingNum = 5;           %the frame number that will be saved
     end
 
     if Dnum <= SavingNum
         if ~isempty(pn) % fn will be zero if user hits cancel
-            savefast([pn,'\Data',int2str(Dnum),'.mat'],'IData','QData','para','ROIinfo');
+            savefast([pn,'\Data',int2str(Dnum),'.mat'],'IData','QData','para','DPIROI');
             fprintf('The %dth data has been saved!\n ',Dnum);
             Dnum = Dnum+1;
             assignin('base','Dnum',Dnum);
@@ -746,7 +725,7 @@ end
 % Draw ROI of doppler in the image
 function drawROI()
 
-persietent recHandle1 markHandle
+global recHandle1 markHandle
 
 figClose  = evalin('base','figClose');
 bmodeHandle = evalin('base','Resource.DisplayWindow(1).figureHandle');
@@ -768,12 +747,11 @@ switch figClose
                 if  isempty(recHandle1) || ~ishandle(recHandle1)
                     figure(bmodeHandle), hold on,
                     %recHandle1 = rectangle('Position',[x-DPIROI(1)/2,z-DPIROI(2)/2,DPIROI(1),DPIROI(2)],'EdgeColor','r');
-                    recHandle1 = drawSector(DPIROI,radius);
+                    [newX , newY] = drawSector(DPIROI,radius);
+                    recHandle1 = plot(newX,newY,'r-');  %plot is called for only once
                     markHandle = plot(0,DPIROI.focus,'xr','MarkerFaceColor','r','MarkerSize',8,'Linewidth',2);hold off;
                 else
-                    newHandle = drawSector(DPIROI,radius);
-                    newX = newHandle.XData;
-                    newY = newHandle.YData;
+                    [newX , newY] = drawSector(DPIROI,radius);
                     set(recHandle1,'XData',newX,'YData',newY);
                     set(markHandle,'YData',DPIROI.focus);
                 end
@@ -788,19 +766,22 @@ end
 
 % - debug external function
 function debugFunc()
-    
-
+    bmodeHandle = evalin('base','Resource.DisplayWindow(1).figureHandle');    
+    disp(bmodeHandle);
+    pause
 end
 
 
 %% Callback functions
 
 % - branch from one event loop to another loop
-function CBranchButtonCallback(~, ~, UIValue)
-    fprintf("UIvalue = %d",UIValue);
+function measure(~, ~)
+    nStart = evalin('base','nStartMeasure');
     Control = evalin('base','Control');
-    Control.Command = 'setBFlag';
-    assignin('base','Control', Control);
+    Control.Command = 'set&Run';
+    Control.Parameters = {'Parameters',1,'startEvent',nStart};
+    %evalin('base',['Resource.Parameters.startEvent =',num2str(nStart),';']);
+    assignin('base','Control',Control);
 end
 
 %+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -828,6 +809,7 @@ end
 function angleChange(~,~,UIValue)
 PData = evalin('base','PData');
 DPIROI = evalin('base','DPIROI');
+radius = evalin('base','radius');
 if mod(UIValue,2)==1    % must be even
     DPIROI.angles = UIValue+1;
 else
@@ -839,8 +821,8 @@ assignin('base','DPIROI',DPIROI);
 PData(1).Region(2).Shape = struct(...
                    'Name','Sector',...
                    'Position',[0,0,-radius],...
-                   'r1',DPIROI.focus - DPIROI.height,...
-                   'r2',DPIROI.focus + DPIROI.height,...
+                   'r1',radius+DPIROI.focus - DPIROI.height/2,...
+                   'r2',radius+DPIROI.focus + DPIROI.height/2,...
                    'angle',DPIROI.angles);
 PData(1).Region = computeRegions(PData(1));
 assignin('base','PData',PData);
@@ -858,7 +840,8 @@ end
 function heightChange(~,~,UIValue)
 PData = evalin('base','PData');
 DPIROI = evalin('base','DPIROI');
-dpiHandle = evalin('base','dpiHandle');
+radius = evalin('base','radius');
+
 DPIROI.height = UIValue;
 assignin('base','DPIROI',DPIROI);
 
@@ -866,18 +849,18 @@ assignin('base','DPIROI',DPIROI);
 PData(1).Region(2).Shape = struct(...
     'Name','Sector',...
     'Position',[0,0,-radius],...
-    'r1',DPIROI.focus - DPIROI.height,...
-    'r2',DPIROI.focus + DPIROI.height,...
+    'r1',radius+DPIROI.focus - DPIROI.height/2,...
+    'r2',radius+DPIROI.focus + DPIROI.height/2,...
     'angle',DPIROI.angles);
 PData(1).Region = computeRegions(PData(1));
 assignin('base','PData',PData);
-Control = evalin('base','Control');
+%Control = evalin('base','Control');
 Control.Command = 'update&Run';
 Control.Parameters = {'PData'};
 assignin('base','Control', Control);
 assignin('base','adjStatus',1);
-pos = get(dpiHandle,'Position');
-set(dpiHandle,'Position',[pos(1:2),[DPIROI(1)+3,DPIROI(2)]*7]);
+%pos = get(dpiHandle,'Position');
+%set(dpiHandle,'Position',[pos(1:2),[DPIROI(1)+3,DPIROI(2)]*7]);
 
 end
 
@@ -891,6 +874,7 @@ checkFocusAdj = evalin('base','checkFocusAdj');
 bmodeHandle = evalin('base','Resource.DisplayWindow(1).figureHandle');
 bmodeAxes = get(bmodeHandle,'currentAxes');
 DPIROI = evalin('base','DPIROI');
+radius = evalin('base','radius');
 Fc = evalin('base','Fc');
 
 if checkFocusAdj == 2 && freeze == 0    
@@ -898,15 +882,16 @@ if checkFocusAdj == 2 && freeze == 0
     DPIROI.focus = round(pos(3));
     assignin('base','adjStatus',1);
     PData = evalin('base','PData');
-    PData(1).Region(2).Shape = struct(...
-        'Name','Sector',...
-        'Position',[0,0,-radius],...
-        'r1',DPIROI.focus - DPIROI.height,...
-        'r2',DPIROI.focus + DPIROI.height,...
-        'angle',DPIROI.angles);
+PData(1).Region(2).Shape = struct(...
+                   'Name','Sector',...
+                   'Position',[0,0,-radius],...
+                   'r1',radius+DPIROI.focus - DPIROI.height/2,...
+                   'r2',radius+DPIROI.focus + DPIROI.height/2,...
+                   'angle',DPIROI.angles);
     PData(1).Region = computeRegions(PData(1));
     assignin('base','PData',PData);
     assignin('base','DPIROI',DPIROI);
+    %Control = evalin('base','Control');
     Control.Command = 'update&Run';
     Control.Parameters = {'PData'};
     assignin('base','Control', Control);
@@ -937,24 +922,22 @@ assignin('base','checkFocusAdj',checkFocusAdj);
 end
 
 
-%+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 %% Built-in function
-function myHandle  = drawSector(ROI,radius)  
+function [x,y]  = drawSector(ROI,radius)  
 x0 = 0;
 y0 = -radius;
 theta = ROI.angles;
 a1 = 0.5*pi-0.5*theta;
 a2 = a1+theta;
-r1 = ROI.focus+ROI.height - y0;
-r2 = ROI.focus-ROI.height - y0;
+r1 = ROI.focus-ROI.height/2 - y0;
+r2 = ROI.focus+ROI.height/2 - y0;
 t = linspace(a1,a2);
 x = x0 + r1*cos(t);
 y = y0 + r1*sin(t);
 t = flip(t);
 x2 = x0 + r2*cos(t);
 y2 = y0 + r2*sin(t);
-x = [x x2];
-y = [y y2];
-myHandle = plot([x,x(1)],[y,y(1)],'r-');
+x = [x x2 x(1)];
+y = [y y2 y(1)];
 end
