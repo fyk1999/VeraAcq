@@ -818,12 +818,7 @@ end
 assignin('base','DPIROI',DPIROI);
 
 % change PData(1).region(2).shape
-PData(1).Region(2).Shape = struct(...
-                   'Name','Sector',...
-                   'Position',[0,0,-radius],...
-                   'r1',radius+DPIROI.focus - DPIROI.height/2,...
-                   'r2',radius+DPIROI.focus + DPIROI.height/2,...
-                   'angle',DPIROI.angles);
+PData(1).Region(2).Shape.angle = DPIROI.angles;
 PData(1).Region = computeRegions(PData(1));
 assignin('base','PData',PData);
 Control = evalin('base','Control');
@@ -846,12 +841,8 @@ DPIROI.height = UIValue;
 assignin('base','DPIROI',DPIROI);
 
 % change PData(1) size
-PData(1).Region(2).Shape = struct(...
-    'Name','Sector',...
-    'Position',[0,0,-radius],...
-    'r1',radius+DPIROI.focus - DPIROI.height/2,...
-    'r2',radius+DPIROI.focus + DPIROI.height/2,...
-    'angle',DPIROI.angles);
+PData(1).Region(2).Shape.r1 = radius + DPIROI.focus - DPIROI.height/2;
+PData(1).Region(2).Shape.r2 = radius + DPIROI.focus + DPIROI.height/2;
 PData(1).Region = computeRegions(PData(1));
 assignin('base','PData',PData);
 %Control = evalin('base','Control');
@@ -877,17 +868,13 @@ DPIROI = evalin('base','DPIROI');
 radius = evalin('base','radius');
 Fc = evalin('base','Fc');
 
-if checkFocusAdj == 2 && freeze == 0    
+if checkFocusAdj == 2 && freeze == 0
     pos = get(bmodeAxes,'CurrentPoint');
     DPIROI.focus = round(pos(3));
     assignin('base','adjStatus',1);
     PData = evalin('base','PData');
-PData(1).Region(2).Shape = struct(...
-                   'Name','Sector',...
-                   'Position',[0,0,-radius],...
-                   'r1',radius+DPIROI.focus - DPIROI.height/2,...
-                   'r2',radius+DPIROI.focus + DPIROI.height/2,...
-                   'angle',DPIROI.angles);
+    PData(1).Region(2).Shape.r1 = radius + DPIROI.focus - DPIROI.height/2;
+    PData(1).Region(2).Shape.r2 = radius + DPIROI.focus + DPIROI.height/2;
     PData(1).Region = computeRegions(PData(1));
     assignin('base','PData',PData);
     assignin('base','DPIROI',DPIROI);
