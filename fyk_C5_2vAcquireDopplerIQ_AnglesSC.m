@@ -11,16 +11,16 @@ ScaleMax = 500;  % scaling of the display function
 ScaleMin = 0;  % scaling of the display function
 ScaleRange = 0;  % scaling of the display function
 ScaleOffset = 0;  % scaling of the display function
-ne = 50;         % Set ne = number of detect acquisitions.
+ne = 200;         % Set ne = number of detect acquisitions.
 % DPIFrames   = 1;
 BmodeFrames = 10;
 DopplerFrames = 100;
 
 maxVoltage = 50;
 Fc = 6.25e6;
-na  = 3;%number of views (angles) for compound imaging, can be even or odd
+na  = 4;%number of views (angles) for compound imaging, can be even or odd
 numAccum = 2;
-PRFdoppler = 1e3;
+PRFdoppler = 0.75e3;
 PRF = PRFdoppler*na*numAccum;
 PRT = 1/PRF;
 dtheta = (12*pi/180)/(na);        %increment of angle:-2,0,2
@@ -58,17 +58,17 @@ P.endDepth = Format.endDepth;
 DPIROI.focusZ = Format.startDepth + (Format.endDepth-Format.startDepth)/2;  % center point at default;
 DPIROI.focusX = 0;
 DPIROI.width = 80;
-DPIROI.height  = (Format.endDepth-Format.startDepth)/2;   
-DPIROI.origin = [RPIROI.focusZ-DPIROI.height/2 , DPIROI.focusX - DPIROI.width/2];
+DPIROI.height  = 80;   
+DPIROI.origin = [DPIROI.focusX - DPIROI.width/2, 0 ,DPIROI.focusZ-DPIROI.height/2 , ];   %[x y z]
 
 % Specify PData structure array.
 PData(1).PDelta = [1.0, 0, 0.5];  % x, y and z pdeltas
 sizeRows = 10 + ceil((P.endDepth + radius - (radius * cos(scanangle/2)))/PData(1).PDelta(3));
 sizeCols = 10 + ceil(2*(P.endDepth + radius)*sin(scanangle/2)/PData(1).PDelta(1));
-PData(1).Size = [sizeRows,sizeCols,1];     % size, origin and pdelta set region of interest.
-PData(1).Origin(1,1) = (P.endDepth+radius)*sin(-scanangle/2) - 5;
-PData(1).Origin(1,2) = 0;
-PData(1).Origin(1,3) = ceil(radius * cos(scanangle/2)) - radius - 5;
+PData(1).Size = [sizeRows,sizeCols,1];     % [z x y]
+PData(1).Origin(1,1) = (P.endDepth+radius)*sin(-scanangle/2) - 5;      % x
+PData(1).Origin(1,2) = 0;                                              % y
+PData(1).Origin(1,3) = ceil(radius * cos(scanangle/2)) - radius - 5;   % z
 PData(1).Region(1).Shape = struct(...
                    'Name','Sector',...
                    'Position',[0,0,-radius],...
@@ -77,10 +77,16 @@ PData(1).Region(1).Shape = struct(...
                    'angle',scanangle);
 PData(1).Region(2).Shape = struct(...
                    'Name','Rectangle',...
-                   'Position',[DPIROI.focusX,0,DPIROI.focusX-DPIROI.height/2],...
+                   'Position',[DPIROI.focusX,0,DPIROI.focusZ-DPIROI.height/2],...
                    'width',DPIROI.width,...
                    'height',DPIROI.height);
 PData(1).Region = computeRegions(PData(1));
+
+
+BMIROI.origin = PData(1).Origin;        %[x y z]
+BMIROI.width  = ceil(2*(P.endDepth + radius)*sin(scanangle/2)) + 10*PData(1).PDelta(1);  
+BMIROI.height = ceil((P.endDepth + radius - (radius * cos(scanangle/2)))) + 10*PData(1).PDelta(3);
+BMIROI.delta  = PData(1).PDelta;        %[x y z]
 
 
 
@@ -608,7 +614,7 @@ Event(n).recon = 0;     % no Recon
 Event(n).process = 0;
 Event(n).seqControl = nsc; % jump command
 SeqControl(nsc).command = 'jump';
-SeqControl(nsc).argument = nStartMeasure+1;
+SeqControl(nsc).argument = nStartMeasure+2;
 nsc = nsc + 1;
 n = n+1;
 
@@ -636,15 +642,15 @@ UI(1).Control = VsButtonControl('LocationCode','UserB2',...
 
 % ROI adjustment
 UI(2).Control = VsSliderControl('LocationCode','UserB5', ...
-    'Label','ROI angle',...
-    'SliderMinMaxVal',[0.4,0.8,DPIROI.width],...
+    'Label','ROI Width',...
+    'SliderMinMaxVal',[40,120,DPIROI.width],...
     'SliderStep',[2/80,10/80],'ValueFormat','%3.0f',...
     'Callback',@widthChange);
 
 
 UI(3).Control = VsSliderControl('LocationCode','UserB4', ...
     'Style','VsSlider','Label','ROI Hight',...
-    'SliderMinMaxVal',[20,(Format.endDepth-Format.startDepth),DPIROI.height],...
+    'SliderMinMaxVal',[40,(Format.endDepth-Format.startDepth),DPIROI.height],...
     'SliderStep',[2/100,10/100],'ValueFormat','%3.0f',...
     'Callback',@heightChange);
 
@@ -671,10 +677,10 @@ UI(4).Control = vsv.seq.uicontrol.VsButtonGroupControl('LocationCode','UserB3',.
 % @ sign. You can now mark this function handle, and right click and then
 % select 'Open runTimeMon' and the editor will jump to the function
 % definition in your script
-EF(1).Function = vsv.seq.function.ExFunctionDef('saveIQData', @saveMeasure);
+EF(1).Function = vsv.seq.function.ExFunctionDef('saveMeasure', @saveMeasure);
 EF(2).Function = vsv.seq.function.ExFunctionDef('drawROI', @drawROI);
 EF(3).Function = vsv.seq.function.ExFunctionDef('debugFunc', @debugFunc);
-EF(4).Function = vsv.seq.function.ExFunctionDef('debugFunc', @saveMonitor);
+EF(4).Function = vsv.seq.function.ExFunctionDef('saveMonitor', @saveMonitor);
 
 %% other thing
 
@@ -690,7 +696,7 @@ adjStatus = 1;
 
 % Save all the structures to a .mat file.
 save(['MatFiles\',filename]);
-%VSX
+VSX
 return
 
 
@@ -702,6 +708,7 @@ function saveMeasure(IData,QData)
 %
     para = evalin('base','para');
     DPIROI = evalin('base','DPIROI');
+    BMIROI = evalin('base','BMIROI');
     pn = evalin('base','pn');
 
     persistent SavingNum;
@@ -715,7 +722,7 @@ function saveMeasure(IData,QData)
 
     if Dnum <= SavingNum
         if ~isempty(pn) % fn will be zero if user hits cancel
-            savefast([pn,'\Data',int2str(Dnum),'.mat'],'IData','QData','para','DPIROI');
+            savefast([pn,'\Data',int2str(Dnum),'.mat'],'IData','QData','para','BMIROI','DPIROI');
             fprintf('The %dth data has been saved!\n ',Dnum);
             Dnum = Dnum+1;
             assignin('base','Dnum',Dnum);
@@ -768,10 +775,16 @@ switch figClose
             if ishandle(bmodeHandle)
                 if  isempty(recHandle1) || ~ishandle(recHandle1)
                     figure(bmodeHandle), hold on,
-                    recHandle1 = rectangle('Position',[DPIROI.focusX-DPIROI.width/2,DPIROI.focusZ-DPIROI.height/2,DPIROI.width,DPIROI.height],'EdgeColor','r');
-                    markHandle = plot(0,DPIROI.focus,'xr','MarkerFaceColor','r','MarkerSize',8,'Linewidth',2);hold off;
+                    recHandle1 = rectangle('Position',[DPIROI.focusX-DPIROI.width/2,...
+                        DPIROI.focusZ-DPIROI.height/2,...
+                        DPIROI.width,DPIROI.height],...
+                        'EdgeColor','r');
+                    markHandle = plot(DPIROI.focusX,DPIROI.focusZ,'xr','MarkerFaceColor','r','MarkerSize',8,'Linewidth',2);hold off;
                 else
-                    set(recHandle1,'Position',[x-DPIROI(1)/2,z-DPIROI(2)/2,DPIROI(1),DPIROI(2)],'EdgeColor','r');
+                    set(recHandle1,'Position',[DPIROI.focusX-DPIROI.width/2,...
+                        DPIROI.focusZ-DPIROI.height/2,...
+                        DPIROI.width,DPIROI.height],...
+                        'EdgeColor','r');
                     set(markHandle,'YData',DPIROI.focusZ);
                     set(markHandle,'XData',DPIROI.focusX);
                 end
@@ -786,9 +799,7 @@ end
 
 % - debug external function
 function debugFunc()
-    bmodeHandle = evalin('base','Resource.DisplayWindow(1).figureHandle');    
-    disp(bmodeHandle);
-    pause
+
 end
 
 
@@ -839,7 +850,7 @@ assignin('base','DPIROI',DPIROI);
 % change PData(1).region(2).shape
 PData(1).Region(2).Shape = struct(...
                    'Name','Rectangle',...
-                   'Position',[DPIROI.focusX,0,DPIROI.focusX-DPIROI.height/2],...
+                   'Position',[DPIROI.focusX,0,DPIROI.focusZ-DPIROI.height/2],...
                    'width',DPIROI.width,...
                    'height',DPIROI.height);
 PData(1).Region = computeRegions(PData(1));
@@ -865,7 +876,7 @@ assignin('base','DPIROI',DPIROI);
 % change PData(1) size
 PData(1).Region(2).Shape = struct(...
                    'Name','Rectangle',...
-                   'Position',[DPIROI.focusX,0,DPIROI.focusX-DPIROI.height/2],...
+                   'Position',[DPIROI.focusX,0,DPIROI.focusZ-DPIROI.height/2],...
                    'width',DPIROI.width,...
                    'height',DPIROI.height);
 PData(1).Region = computeRegions(PData(1));
@@ -898,7 +909,7 @@ if checkFocusAdj == 2 && freeze == 0
     PData = evalin('base','PData');
     PData(1).Region(2).Shape = struct(...
         'Name','Rectangle',...
-        'Position',[DPIROI.focusX,0,DPIROI.focusX-DPIROI.height/2],...
+        'Position',[DPIROI.focusX,0,DPIROI.focusZ-DPIROI.height/2],...
         'width',DPIROI.width,...
         'height',DPIROI.height);
     PData(1).Region = computeRegions(PData(1));
