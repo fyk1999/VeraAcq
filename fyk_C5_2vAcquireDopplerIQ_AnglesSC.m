@@ -4,26 +4,19 @@
 clear;
 
 filename = ('fyk_C5_2vAcquireDopplerIQ_AnglesSC');
-pn = 'E:\FYK\Delete';
+pn = uigetdir;
 
-
-ScaleMax = 500;  % scaling of the display function
-ScaleMin = 0;  % scaling of the display function
-ScaleRange = 0;  % scaling of the display function
-ScaleOffset = 0;  % scaling of the display function
-ne = 200;         % Set ne = number of detect acquisitions.
-% DPIFrames   = 1;
+ne = 20;         % Set ne = number of detect acquisitions.
 BmodeFrames = 10;
-DopplerFrames = 100;
 
 maxVoltage = 50;
-Fc = 6.25e6;
-na  = 4;%number of views (angles) for compound imaging, can be even or odd
+Fc = 4.1667e6;
+na  = 3;%number of views (angles) for compound imaging, can be even or odd
 numAccum = 2;
-PRFdoppler = 0.75e3;
+PRFdoppler = 0.3e3;
 PRF = PRFdoppler*na*numAccum;
 PRT = 1/PRF;
-dtheta = (12*pi/180)/(na);        %increment of angle:-2,0,2
+dtheta = (20*pi/180)/(na-1);        %increment of angle:-2,0,2
 startAngle = -(na-1)/2*dtheta;
 
 
@@ -31,7 +24,7 @@ startAngle = -(na-1)/2*dtheta;
 Resource.Parameters.numTransmit = 128;      % number of transmit channels.
 Resource.Parameters.numRcvChannels = 128;    % number of receive channels.
 Resource.Parameters.speedOfSound = 1540;    % set speed of sound in m/sec before calling computeTrans
-Resource.Parameters.simulateMode = 1;
+Resource.Parameters.simulateMode = 0;
 
 
 % Specify Trans structure array.
@@ -48,17 +41,17 @@ theta = -(scanangle/2); % angle to left edge from centerline
 %% Imaging parameters
 
 % Specify Format structure array.
-Format.startDepth = 20;   % Acquisition depth in wavelengths150
-Format.endDepth = 180;   % This should preferrably be a multiple of 128 samples.300
+Format.startDepth = 30;   % Acquisition depth in wavelengths150
+Format.endDepth = 230;   % This should preferrably be a multiple of 128 samples.300
 P.startDepth = Format.startDepth;
 P.endDepth = Format.endDepth;
 
 
 
-DPIROI.focusZ = Format.startDepth + (Format.endDepth-Format.startDepth)/2;  % center point at default;
+DPIROI.focusZ = 20 + 45;  % center point at default;
 DPIROI.focusX = 0;
-DPIROI.width = 80;
-DPIROI.height  = 80;   
+DPIROI.width = 120;
+DPIROI.height  = 90;   
 DPIROI.origin = [DPIROI.focusX - DPIROI.width/2, 0 ,DPIROI.focusZ-DPIROI.height/2 , ];   %[x y z]
 
 % Specify PData structure array.
@@ -139,10 +132,6 @@ para.Tprf = 0;   %?????????????xxxxxxxxx???????????????!!!!!!!!
 para.prf = PRF;
 
 
-% ROI Info
-ROIinfo = ["Unable to calculate for now!"];
-
-
 
 %% Specify Resources.
 autofixed_sampleNum = 1024*ceil(para.intervalSample/1024);
@@ -169,7 +158,7 @@ Resource.ImageBuffer(1).numFrames = BmodeFrames;
 Resource.RcvBuffer(2).datatype = 'int16';
 Resource.RcvBuffer(2).rowsPerFrame = ne*na*autofixed_sampleNum;
 Resource.RcvBuffer(2).colsPerFrame = Resource.Parameters.numRcvChannels;  % RcvBuffer is 64 cols using syn aper.
-Resource.RcvBuffer(2).numFrames = DopplerFrames;     %
+Resource.RcvBuffer(2).numFrames = 1;     %
 
 
 % InterBuffer for DPI visualizaion
@@ -190,8 +179,7 @@ Resource.DisplayWindow(1).Position = [250,(ScrnSize(4)-(DwHeight+150))/2, ...  %
                                       DwWidth, DwHeight];
 Resource.DisplayWindow(1).ReferencePt = [PData(1).Origin(1),0,PData(1).Origin(3)];   % 2D imaging is in the X,Z plane
 Resource.DisplayWindow(1).Type = 'Matlab';
-%Resource.DisplayWindow(1).numFrames = 20;
-%Resource.DisplayWindow(1).AxesUnits = 'mm';
+%Resource.DisplayWindow(1).AxesUnits = 'mm';   % use wavelength as unit
 Resource.DisplayWindow.Colormap = gray(256);
 Resource.VDAS.dmaTimeout = 2000;
 
@@ -210,7 +198,6 @@ Resource.VDAS.dmaTimeout = 2000;
 
 
 
-
 %% Transmit parameters
 % Specify Transmit waveform structure.
 % - detect waveform
@@ -218,12 +205,12 @@ TW(1).type = 'parametric';
 TW(1).Parameters = [Fc/1e6,0.67,2,1];   % A, B, C, D
 
 TW(2).type = 'parametric';
-TW(2).Parameters = [Fc/1e6,0.67,8,1];   % A, B, C, D
+TW(2).Parameters = [Fc/1e6,0.67,4,1];   % A, B, C, D
 
 % Specify TX structure array.
 TX = repmat(struct('waveform', 1, ...
     'Origin', [0.0,0.0,0.0], ...
-    'focus', 0.0, ...
+    'focus', 0, ...
     'Steer', [0.0,0.0], ...
     'Apod', zeros(1,Trans.numelements), ...
     'Delay', zeros(1,Trans.numelements),...
@@ -271,7 +258,7 @@ Receive = repmat(struct('Apod', zeros(1,Trans.numelements), ...
     'acqNum', 1, ...
     'sampleMode', 'NS200BW', ...
     'mode', 0, ...
-    'callMediaFunc', 0), 1, na*BmodeFrames+ne*na*Resource.RcvBuffer(2).numFrames*2);
+    'callMediaFunc', 0), 1, na*BmodeFrames+ne*na*2);
 
 % - Set event specific Receive attributes for B-mode
 for ii = 1:Resource.RcvBuffer(1).numFrames
@@ -287,27 +274,26 @@ end
 
 % - Set event specific Receive attributes for Doppler-mode
 ind = na*BmodeFrames;
-for N = 1:Resource.RcvBuffer(2).numFrames
     for j = 1:ne
         for k = 1:na
             % first acquistion
             Receive(ind+(j-1)*na*2+(k-1)*2+1).callMediaFunc = 1;
             Receive(ind+(j-1)*na*2+(k-1)*2+1).Apod(1:128) = 1.0;
-            Receive(ind+(j-1)*na*2+(k-1)*2+1).framenum = N;
+            Receive(ind+(j-1)*na*2+(k-1)*2+1).framenum = 1;
             Receive(ind+(j-1)*na*2+(k-1)*2+1).bufnum = 2;
             Receive(ind+(j-1)*na*2+(k-1)*2+1).acqNum = (j-1)*na+k;
             Receive(ind+(j-1)*na*2+(k-1)*2+1).mode = 0;
             % accumulate acquistion
             Receive(ind+(j-1)*na*2+(k-1)*2+2).callMediaFunc = 0;
             Receive(ind+(j-1)*na*2+(k-1)*2+2).Apod(1:128) = 1.0;
-            Receive(ind+(j-1)*na*2+(k-1)*2+2).framenum = N;
+            Receive(ind+(j-1)*na*2+(k-1)*2+2).framenum = 1;
             Receive(ind+(j-1)*na*2+(k-1)*2+2).bufnum = 2;
             Receive(ind+(j-1)*na*2+(k-1)*2+2).acqNum = (j-1)*na+k;
             Receive(ind+(j-1)*na*2+(k-1)*2+2).mode = 1;
         end
     end
-    ind = ind + na*ne*2;
-end
+
+
 
 
 
@@ -333,7 +319,7 @@ Recon(1) = struct(...
 Recon(2) = struct(...
     'senscutoff', 0.6, ...
     'pdatanum', 1, ...
-    'rcvBufFrame',-1, ...
+    'rcvBufFrame',1, ...
     'IntBufDest', [2,1], ...
     'ImgBufDest', [0,0], ...
     'RINums',(na+1:(ne*na+na))');
@@ -361,7 +347,7 @@ for j = 1:ne
             ReconInfo(na+(j-1)*na+ii).mode = 'replaceIQ';
         end
         ReconInfo(na+(j-1)*na+ii).txnum = ii;
-        ReconInfo(na+(j-1)*na+ii).rcvnum = na*BmodeFrames+(j-1)*na+ii;  % ???????!!!!!!
+        ReconInfo(na+(j-1)*na+ii).rcvnum = na*BmodeFrames+(j-1)*na*2+(ii-1)*2+1;  % ???????!!!!!!
         ReconInfo(na+(j-1)*na+ii).pagenum = j;
         ReconInfo(na+(j-1)*na+ii).regionnum = 2;
     end
@@ -450,24 +436,28 @@ TCPD = 6;
 SeqControl(7).command = 'setTPCProfile';
 SeqControl(7).condition = 'next';
 SeqControl(7).argument = 1;
-TCPBB = 7;
+TCPB = 7;
 
 
-SeqControl(8).command = 'loopCnt';
-SeqControl(8).argument = numAccum;
-SLCN = 8;
+SeqControl(8).command = 'sync';
+SYNC = 8;
 
 
-SeqControl(9).command = 'sync';
-SYNC = 9;
-
-
-nsc = 10;
+nsc = 9;
 
 % Specify Event structure arrays.
 n = 1;
 
 nStartMonitor = n;
+
+Event(n).info = 'TPC Bmode';
+Event(n).tx = 0;
+Event(n).rcv = 0;
+Event(n).recon = 0;
+Event(n).process = 0;
+Event(n).seqControl = TCPB;
+n = n+1;
+
 
 for ii = 1:Resource.RcvBuffer(1).numFrames   %Resource.RcvBuffer(1).numFrames = BmodeFrames=10;
     
@@ -558,53 +548,51 @@ n = n+1;
 
 
 ind = na*BmodeFrames;
-for N = 1:Resource.RcvBuffer(2).numFrames
-    for j = 1:ne
-        for ii=1:na
-            for k = 1:numAccum
-                if(k==1)
-                    Event(n).info = '1st acquisition';
-                    Event(n).tx = ii; %  PWNum*PWFocusXNum+numRays+1;
-                    Event(n).rcv = ind+na*(j-1)*2+(ii-1)*2+1; %numRays*BmodeFrames+j;%%%
-                    Event(n).recon = 0;      % no reconstruction.
-                    Event(n).process = 0;    % no processing
-                    Event(n).seqControl = [TTNAQ]; %100us per detect
-                    n = n+1;
-                else
-                    Event(n).info = 'Accumulate acquisition';
-                    Event(n).tx = ii; %  PWNum*PWFocusXNum+numRays+1;
-                    Event(n).rcv = ind+na*(j-1)*2+(ii-1)*2+2; %numRays*BmodeFrames+j;%%%
-                    Event(n).recon = 0;      % no reconstruction.
-                    Event(n).process = 0;    % no processing
-                    Event(n).seqControl = [TTNAQ]; %100us per detect
-                    n = n+1;
-                end
+for j = 1:ne
+    for ii=1:na
+        for k = 1:numAccum
+            if(k==1)
+                Event(n).info = '1st acquisition';
+                Event(n).tx = ii; %  PWNum*PWFocusXNum+numRays+1;
+                Event(n).rcv = ind+na*(j-1)*2+(ii-1)*2+1; %numRays*BmodeFrames+j;%%%
+                Event(n).recon = 0;      % no reconstruction.
+                Event(n).process = 0;    % no processing
+                Event(n).seqControl = [TTNAQ]; %100us per detect
+                n = n+1;
+            else
+                Event(n).info = 'Accumulate acquisition';
+                Event(n).tx = ii; %  PWNum*PWFocusXNum+numRays+1;
+                Event(n).rcv = ind+na*(j-1)*2+(ii-1)*2+2; %numRays*BmodeFrames+j;%%%
+                Event(n).recon = 0;      % no reconstruction.
+                Event(n).process = 0;    % no processing
+                Event(n).seqControl = [TTNAQ]; %100us per detect
+                n = n+1;
             end
         end
     end
-    Event(n-1).seqControl = [TTNF,nsc,RTML];
-    SeqControl(nsc).command = 'transferToHost'; % transfer frame to host buffer
-    nsc = nsc+1;
-
-
-    Event(n).info = 'reconstruct to IQ';
-    Event(n).tx = 0;         % no transmit
-    Event(n).rcv = 0;        % no rcv
-    Event(n).recon = 2;      % reconstruction
-    Event(n).process = 0;    % no process
-    Event(n).seqControl = 0;
-    n = n+1;
-
-    Event(n).info = 'Save one frame data';
-    Event(n).tx = 0;         % no transmit
-    Event(n).rcv = 0;        % no rcv
-    Event(n).recon = 0;      % no recon
-    Event(n).process = 2;    % save
-    Event(n).seqControl = 0;
-    n = n+1;
-
-    ind = ind + na*ne*2;
 end
+Event(n-1).seqControl = [TTNF,nsc,RTML];
+SeqControl(nsc).command = 'transferToHost'; % transfer frame to host buffer
+nsc = nsc+1;
+
+
+Event(n).info = 'reconstruct to IQ';
+Event(n).tx = 0;         % no transmit
+Event(n).rcv = 0;        % no rcv
+Event(n).recon = 2;      % reconstruction
+Event(n).process = 0;    % no process
+Event(n).seqControl = 0;
+n = n+1;
+
+Event(n).info = 'Save one frame data';
+Event(n).tx = 0;         % no transmit
+Event(n).rcv = 0;        % no rcv
+Event(n).recon = 0;      % no recon
+Event(n).process = 2;    % save
+Event(n).seqControl = 0;
+n = n+1;
+
+
 
 
 Event(n).info = 'Jump back to first event of Measure';
@@ -643,7 +631,7 @@ UI(1).Control = VsButtonControl('LocationCode','UserB2',...
 % ROI adjustment
 UI(2).Control = VsSliderControl('LocationCode','UserB5', ...
     'Label','ROI Width',...
-    'SliderMinMaxVal',[40,120,DPIROI.width],...
+    'SliderMinMaxVal',[60,160,DPIROI.width],...
     'SliderStep',[2/80,10/80],'ValueFormat','%3.0f',...
     'Callback',@widthChange);
 
@@ -696,7 +684,7 @@ adjStatus = 1;
 
 % Save all the structures to a .mat file.
 save(['MatFiles\',filename]);
-VSX
+%VSX
 return
 
 
@@ -710,25 +698,38 @@ function saveMeasure(IData,QData)
     DPIROI = evalin('base','DPIROI');
     BMIROI = evalin('base','BMIROI');
     pn = evalin('base','pn');
-
+    
     persistent SavingNum;
     persistent Dnum ;
+    persistent groupInd;
     if isempty(Dnum)
         Dnum = 1;
     end
     if isempty(SavingNum)
-        SavingNum = 5;           %the frame number that will be saved
+        SavingNum = 2;           %the frame number that will be saved
     end
-
+    if isempty(groupInd)
+        groupInd = 1;
+    end
+    
     if Dnum <= SavingNum
         if ~isempty(pn) % fn will be zero if user hits cancel
-            savefast([pn,'\Data',int2str(Dnum),'.mat'],'IData','QData','para','BMIROI','DPIROI');
+            savefast([pn,'\Data',int2str(groupInd),'_',int2str(Dnum),'.mat'],'IData','QData','para','BMIROI','DPIROI');
             fprintf('The %dth data has been saved!\n ',Dnum);
             Dnum = Dnum+1;
             assignin('base','Dnum',Dnum);
         else
-            disp('The data is not saved.');
+            error('The data is not saved.');
         end
+    else
+        % Go back to monitor status
+        groupInd = groupInd+1;
+        Dnum = 0;
+        nStart = evalin('base','nStartMonitor');
+        Control = evalin('base','Control');
+        Control.Command = 'set&Run';
+        Control.Parameters = {'Parameters',1,'startEvent',nStart};
+        assignin('base','Control',Control);
     end
 
 end
@@ -740,11 +741,17 @@ end
 % - save one frame of iq buffer data of B-mode
 function saveMonitor(IData,QData)
     pn = evalin('base','pn');
-    if ~isempty(pn) % fn will be zero if user hits cancel
-        savefast([pn,'\Bmode','.mat'],'IData','QData'); 
-    else
-        disp('The data is not saved.');
+    persistent groupInd;
+    if isempty(groupInd)
+        groupInd = 1;
     end
+    if ~isempty(pn) % fn will be zero if user hits cancel
+        savefast([pn,'\Bmode',int2str(groupInd),'.mat'],'IData','QData');
+        groupInd = groupInd + 1;
+    else
+        error('The data is not saved.');
+    end
+
 end
 
 
@@ -845,6 +852,7 @@ if mod(UIValue,2)==1    % must be even
 else
     DPIROI.width = UIValue;
 end
+DPIROI.origin = [DPIROI.focusX - DPIROI.width/2, 0 ,DPIROI.focusZ-DPIROI.height/2 , ];   %[x y z]
 assignin('base','DPIROI',DPIROI);
 
 % change PData(1).region(2).shape
@@ -871,6 +879,7 @@ PData = evalin('base','PData');
 DPIROI = evalin('base','DPIROI');
 
 DPIROI.height = UIValue;
+DPIROI.origin = [DPIROI.focusX - DPIROI.width/2, 0 ,DPIROI.focusZ-DPIROI.height/2 , ];   %[x y z]
 assignin('base','DPIROI',DPIROI);
 
 % change PData(1) size
@@ -905,6 +914,7 @@ if checkFocusAdj == 2 && freeze == 0
     pos = get(bmodeAxes,'CurrentPoint');
     DPIROI.focusZ = round(pos(3));
     DPIROI.focusX = round(pos(1));
+    DPIROI.origin = [DPIROI.focusX - DPIROI.width/2, 0 ,DPIROI.focusZ-DPIROI.height/2 , ];   %[x y z]
     assignin('base','adjStatus',1);
     PData = evalin('base','PData');
     PData(1).Region(2).Shape = struct(...
